@@ -8,6 +8,7 @@ pub mod db;
 pub mod island;
 pub mod llm;
 pub mod math;
+pub mod nova;
 #[cfg(target_os = "macos")]
 pub mod menubar;
 pub mod tools;
@@ -84,6 +85,7 @@ impl AppState {
         if apple.0 {
             out.push(llm::apple::model_info());
         }
+        out.push(nova::model_info());
         out
     }
 
@@ -697,6 +699,14 @@ fn set_menu_labels(app: tauri::AppHandle, labels: HashMap<String, String>) -> R<
     appmenu::install(&app, &labels).map_err(err)
 }
 
+/// Enregistre un fichier choisi par l'utilisateur dans la boîte « Enregistrer » (ex. dessin de Nova 1 en PNG).
+#[tauri::command]
+fn save_base64_file(path: String, data: String) -> R<()> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(data.trim()).map_err(err)?;
+    std::fs::write(&path, bytes).map_err(err)
+}
+
 // ---------------------------------------------------------------- Nova Code
 
 fn project_root(state: &AppState, project: &str) -> R<std::path::PathBuf> {
@@ -813,7 +823,7 @@ pub fn run() {
             bootstrap, list_conversations, get_messages, rename_conversation, toggle_pin, delete_conversation, search, library,
             set_setting, add_memory, delete_memory, import_attachment, import_bytes, apple_camera,
             send_message, regenerate, cancel_generation, decide_action,
-            models_overview, install_engine, download_model, cancel_download, delete_model, warm_up, set_menu_labels, code_open_project, code_tree, code_read, code_write,
+            models_overview, install_engine, download_model, cancel_download, delete_model, warm_up, set_menu_labels, code_open_project, code_tree, code_read, code_write, save_base64_file,
             weather, search_places, set_allowed_folders, search_files, open_path, open_url, system_info,
             export_data, delete_all_conversations, activity_log, clear_activity, dictation_start, dictation_stop,
             math_eval, math_run, units_catalog, units_convert, stats_describe, probabilities, matrix_op, plot,

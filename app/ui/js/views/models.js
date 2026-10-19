@@ -30,6 +30,7 @@ export async function render(v, ctx) {
     if (!o) return;
     const content = page.querySelector('#content');
     content.innerHTML = '';
+    content.appendChild(novaCard(o, ctx));
     content.appendChild(engineCard(o, ctx));
     if (o.engine.installed) {
       content.appendChild(el(`<h2 style="margin-top:8px">${icon('sparkles')} Modèles gratuits <span class="faint" style="font-weight:400">— mémoire détectée : ${o.ram_gb} Go</span></h2>`));
@@ -40,6 +41,25 @@ export async function render(v, ctx) {
     content.appendChild(otherEngines(o, ctx));
   }
   draw(true);
+}
+
+/** Nova 1 : modèle maison, intégré à l'application (rien à télécharger). */
+function novaCard(o, ctx) {
+  const info = o.available.find((m) => m.provider === 'nova1');
+  const inUse = ctx.state.settings.model === 'nova1';
+  const card = el(`<div class="card stack"><div class="row"><span class="mark"></span><b style="font-size:15px">Nova 1</b><span class="faint">créé par NOVA, entraîné de zéro</span><span class="grow"></span><span class="badge ok">${icon('check')} Intégré · ${formatBytes(info?.size_bytes || 0)}</span></div>
+    <p class="muted" style="margin:0;font-size:12.5px">Le modèle maison de NOVA, ultra rapide (moins d'une milliseconde) et sans téléchargement. Il répond seul aux demandes simples, quel que soit le modèle choisi, et peut être utilisé à part entière.</p>
+    <div class="kv"><div><small>Texte</small><span>salutations, heure, date, dé, blagues…</span></div><div><small>Dessin</small><span>« dessine un canard sur un lac »</span></div><div><small>Résumé</small><span>PDF et textes joints</span></div><div><small>Vision</small><span>${info?.vision ? 'reconnaît 106 catégories, images et vidéos' : 'non installée dans cette version'}</span></div></div>
+    <div class="faint">Pour une conversation libre, des explications ou du code, utilise un modèle de conversation ci-dessous (Gemma 4…).</div>
+    <div class="row act"></div></div>`);
+  const act = card.querySelector('.act');
+  if (inUse) act.appendChild(el(`<span class="badge ok">${icon('check')} Utilisé</span>`));
+  else {
+    const use = el('<button class="btn primary small">Utiliser Nova 1</button>');
+    use.onclick = async () => { await ctx.setSetting('model', 'nova1'); toast('Nova 1 sera utilisé pour les prochaines réponses.'); ctx.setView('models'); };
+    act.appendChild(use);
+  }
+  return card;
 }
 
 function engineCard(o, ctx) {

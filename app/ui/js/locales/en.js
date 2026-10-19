@@ -515,4 +515,12 @@ export default {
  "Passe la souris sur l'encoche (ou sur la petite pastille en haut des écrans externes) : choisis Nova Chat ou Nova Code et le modèle, puis pose ta question sans quitter ce que tu fais.": "Hover over the notch (or the small pill at the top of external screens): pick Nova Chat or Nova Code and the model, then ask without leaving what you’re doing.",
  "Vérifier automatiquement sur Wikipédia les questions d'actualité (dirigeants, « actuel »…)": "Automatically check current-affairs questions on Wikipedia (leaders, “current”…)",
  "Seule la question est envoyée à Wikipédia, et la source est affichée sous la réponse. Désactivé : NOVA répond avec les connaissances du modèle, qui peuvent dater.": "Only the question is sent to Wikipedia, and the source is shown under the answer. When off, NOVA answers from the model’s knowledge, which may be out of date.",
+ "Enregistrer en PNG": "Save as PNG",
+ "Enregistré": "Saved",
+ "Utiliser Nova 1": "Use Nova 1",
+ "créé par NOVA, entraîné de zéro": "made by NOVA, trained from scratch",
+ "Le modèle maison de NOVA, ultra rapide (moins d'une milliseconde) et sans téléchargement. Il répond seul aux demandes simples, quel que soit le modèle choisi, et peut être utilisé à part entière.": "NOVA’s own model: ultra fast (under a millisecond), nothing to download. It answers simple requests on its own whatever model is selected, and can be used on its own too.",
+ "Pour une conversation libre, des explications ou du code, utilise un modèle de conversation ci-dessous (Gemma 4…).": "For open conversation, explanations or code, use a chat model below (Gemma 4…).",
+ "Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi": "Instant Nova 1 answers for simple requests (greetings, time, date, dice, jokes), whatever model is selected",
+ "Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.": "Drawings (“draw a cat”) are always made by Nova 1. When off, small requests go to the selected model.",
 };

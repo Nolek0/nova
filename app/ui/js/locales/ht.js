@@ -515,4 +515,12 @@ export default {
  "Passe la souris sur l'encoche (ou sur la petite pastille en haut des écrans externes) : choisis Nova Chat ou Nova Code et le modèle, puis pose ta question sans quitter ce que tu fais.": "Pase sourit la sou notch la (oswa sou ti grenn anlè ekran ekstèn yo): chwazi Nova Chat oswa Nova Code ak modèl la, epi poze kesyon ou san kite sa w ap fè a.",
  "Vérifier automatiquement sur Wikipédia les questions d'actualité (dirigeants, « actuel »…)": "Verifye otomatikman sou Wikipedya kesyon sou aktyalite (dirijan, « aktyèl »…)",
  "Seule la question est envoyée à Wikipédia, et la source est affichée sous la réponse. Désactivé : NOVA répond avec les connaissances du modèle, qui peuvent dater.": "Se sèlman kesyon an ki voye bay Wikipedya, epi sous la parèt anba repons lan. Lè l etenn, NOVA reponn ak sa modèl la konnen, ki ka pa ajou.",
+ "Enregistrer en PNG": "Anrejistre an PNG",
+ "Enregistré": "Anrejistre",
+ "Utiliser Nova 1": "Itilize Nova 1",
+ "créé par NOVA, entraîné de zéro": "NOVA kreye l, antrene depi zewo",
+ "Le modèle maison de NOVA, ultra rapide (moins d'une milliseconde) et sans téléchargement. Il répond seul aux demandes simples, quel que soit le modèle choisi, et peut être utilisé à part entière.": "Pwòp modèl NOVA: trè rapid (mwens pase yon milisgond), anyen pou telechaje. Li reponn poukont li pou demann senp yo, kèlkeswa modèl ou chwazi a, epi ou ka itilize l poukont li tou.",
+ "Pour une conversation libre, des explications ou du code, utilise un modèle de conversation ci-dessous (Gemma 4…).": "Pou yon konvèsasyon lib, eksplikasyon oswa kòd, itilize yon modèl konvèsasyon anba a (Gemma 4…).",
+ "Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi": "Repons enstantane Nova 1 pou demann senp (bonjou, lè, dat, de, blag), kèlkeswa modèl la",
+ "Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.": "Desen yo (« desine yon chat ») toujou fèt pa Nova 1. Lè l etenn, ti demann yo ale nan modèl ou chwazi a.",
 };

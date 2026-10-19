@@ -515,4 +515,12 @@ export default {
  "Passe la souris sur l'encoche (ou sur la petite pastille en haut des écrans externes) : choisis Nova Chat ou Nova Code et le modèle, puis pose ta question sans quitter ce que tu fais.": "Passa il puntatore sul notch (o sulla piccola pillola in cima agli schermi esterni): scegli Nova Chat o Nova Code e il modello, poi chiedi senza lasciare ciò che stai facendo.",
  "Vérifier automatiquement sur Wikipédia les questions d'actualité (dirigeants, « actuel »…)": "Verifica automaticamente su Wikipedia le domande di attualità (leader, «attuale»…)",
  "Seule la question est envoyée à Wikipédia, et la source est affichée sous la réponse. Désactivé : NOVA répond avec les connaissances du modèle, qui peuvent dater.": "Solo la domanda viene inviata a Wikipedia e la fonte appare sotto la risposta. Disattivato: NOVA risponde con le conoscenze del modello, che possono essere datate.",
+ "Enregistrer en PNG": "Salva come PNG",
+ "Enregistré": "Salvato",
+ "Utiliser Nova 1": "Usa Nova 1",
+ "créé par NOVA, entraîné de zéro": "creato da NOVA, addestrato da zero",
+ "Le modèle maison de NOVA, ultra rapide (moins d'une milliseconde) et sans téléchargement. Il répond seul aux demandes simples, quel que soit le modèle choisi, et peut être utilisé à part entière.": "Il modello di NOVA: ultraveloce (meno di un millisecondo) e senza download. Risponde da solo alle richieste semplici, qualunque sia il modello scelto, e può essere usato anche da solo.",
+ "Pour une conversation libre, des explications ou du code, utilise un modèle de conversation ci-dessous (Gemma 4…).": "Per conversazioni libere, spiegazioni o codice, usa un modello di conversazione qui sotto (Gemma 4…).",
+ "Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi": "Risposte istantanee di Nova 1 per richieste semplici (saluti, ora, data, dado, barzellette), qualunque sia il modello",
+ "Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.": "I disegni («disegna un gatto») li fa sempre Nova 1. Disattivato: le piccole richieste passano dal modello scelto.",
 };

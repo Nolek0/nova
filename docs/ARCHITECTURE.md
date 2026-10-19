@@ -44,4 +44,23 @@ File access is limited to user-approved folders. Documents and web pages are wra
 
 ## Nova 1
 
-A small neural network written from scratch in Rust (no ML library, no external weights): hashed character n-gram embeddings → two convolution layers → intent head + BIO slot-tagging head. Trained on sentences generated from hand-written templates (`nova1/data/generate.py`). Purpose: understand everyday commands in well under a millisecond. Current results are in `nova1/model/RAPPORT.md`.
+NOVA's own models and tools, written and trained from scratch in this repository: no ML library, no external weights, no other AI involved.
+
+| Part | Code | What it does |
+|---|---|---|
+| **Text** | `nova1/src/lib.rs` | Hashed character n-gram embeddings → two convolution layers → intent head + BIO slot head. 25 intents, about 0.07 ms per sentence. Trained on sentences generated from hand-written templates (`nova1/data/generate.py`). Report: `nova1/model/RAPPORT.md`. |
+| **Vision** | `nova1/src/vision.rs` | Convolutional network (6 conv layers with batch norm, global average pooling) with hand-written backpropagation. Trained on CIFAR-10 + CIFAR-100 (106 categories; the five people classes are merged into “a person”, and nobody is ever identified). Matrix products use Apple's Accelerate on macOS and a portable implementation elsewhere. Report: `nova1/model/RAPPORT_VISION.md`. |
+| **Summary** | `app/src-tauri/src/nova/summary.rs` | Extractive summarizer: TF-IDF + TextRank + position and heading cues, redundancy removed with MMR. It quotes the key sentences; it does not rewrite them. |
+| **Drawing** | `app/src-tauri/src/nova/draw.rs` | Parses the request (subjects, counts, colours, setting, time of day, weather) and composes a flat vector illustration (SVG) from about 30 hand-drawn subjects. |
+| **Video** (macOS) | `apple/…/main.swift` + `nova/vision.rs` | Key frames via AVFoundation, recognised by Nova 1 Vision; audio transcribed on-device by Apple Speech. |
+
+In the app, Nova 1 is both the **instant first layer** (small talk, time, date, dice, jokes, drawings — whatever model is selected) and a **selectable model** that answers on its own (images, videos, documents, drawings). Open-ended chat is left to a chat model.
+
+### Retraining
+
+```bash
+cd nova1
+python3 data/generate.py && cargo run --release --bin nova1-train          # text
+# vision: download CIFAR-10 and CIFAR-100 (binary versions) into data/images and extract them, then
+cargo run --release --bin nova1-train-vision -- 30
+```

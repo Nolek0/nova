@@ -515,4 +515,12 @@ export default {
  "Passe la souris sur l'encoche (ou sur la petite pastille en haut des écrans externes) : choisis Nova Chat ou Nova Code et le modèle, puis pose ta question sans quitter ce que tu fais.": "Fahre über die Notch (oder die kleine Pille oben auf externen Bildschirmen): Wähle Nova Chat oder Nova Code und das Modell und stelle deine Frage, ohne deine Arbeit zu verlassen.",
  "Vérifier automatiquement sur Wikipédia les questions d'actualité (dirigeants, « actuel »…)": "Aktuelle Fragen automatisch auf Wikipedia prüfen (Staatsoberhäupter, „aktuell“…)",
  "Seule la question est envoyée à Wikipédia, et la source est affichée sous la réponse. Désactivé : NOVA répond avec les connaissances du modèle, qui peuvent dater.": "Nur die Frage wird an Wikipedia gesendet, und die Quelle steht unter der Antwort. Ausgeschaltet antwortet NOVA mit dem Wissen des Modells, das veraltet sein kann.",
+ "Enregistrer en PNG": "Als PNG sichern",
+ "Enregistré": "Gesichert",
+ "Utiliser Nova 1": "Nova 1 verwenden",
+ "créé par NOVA, entraîné de zéro": "von NOVA erstellt, von Grund auf trainiert",
+ "Le modèle maison de NOVA, ultra rapide (moins d'une milliseconde) et sans téléchargement. Il répond seul aux demandes simples, quel que soit le modèle choisi, et peut être utilisé à part entière.": "NOVAs eigenes Modell: extrem schnell (unter einer Millisekunde), ohne Download. Es beantwortet einfache Anfragen selbst, egal welches Modell gewählt ist, und kann auch allein verwendet werden.",
+ "Pour une conversation libre, des explications ou du code, utilise un modèle de conversation ci-dessous (Gemma 4…).": "Für freie Gespräche, Erklärungen oder Code nutze ein Gesprächsmodell unten (Gemma 4…).",
+ "Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi": "Sofortantworten von Nova 1 für einfache Anfragen (Begrüßung, Uhrzeit, Datum, Würfel, Witze), egal welches Modell",
+ "Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.": "Zeichnungen („zeichne eine Katze“) macht immer Nova 1. Ausgeschaltet gehen kleine Anfragen an das gewählte Modell.",
 };

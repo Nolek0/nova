@@ -5,6 +5,7 @@
 //   ocr <chemin>      reconnaissance de texte (Vision) dans une image
 //   camera            photo prise avec l'iPhone via la Caméra de continuité
 //   dictate           dictée locale (Speech) ; « stop » sur l'entrée standard pour terminer
+//   video <chemin> <dossier>  images clés (JPEG) et transcription locale de l'audio d'une vidéo
 // Chaque réponse est une ligne JSON sur la sortie standard.
 
 import AppKit
@@ -60,6 +61,11 @@ case "camera":
 
 case "dictate":
     await Dictation.run()
+
+case "video":
+    let rest = Array(args.dropFirst())
+    guard rest.count >= 2 else { emit(["error": "Usage : video <chemin> <dossier>"]); exit(1) }
+    await VideoReader.run(URL(fileURLWithPath: rest[0]), out: URL(fileURLWithPath: rest[1]))
 
 default:
     emit(["error": "Commande inconnue : \(command)"])
@@ -221,5 +227,63 @@ enum Dictation {
         }
         task.cancel()
         emit(["final": last])
+    }
+}
+
+// MARK: - Vidéo
+
+/// Extrait des images réparties sur toute la vidéo et transcrit l'audio sur l'appareil.
+/// Résultat : {"duration": s, "frames": [{"t": s, "path": "..."}], "transcript": "...", "transcript_note": "..."}
+enum VideoReader {
+    static func run(_ url: URL, out: URL) async {
+        let asset = AVURLAsset(url: url)
+        guard let duration = try? await asset.load(.duration).seconds, duration.isFinite, duration > 0 else {
+            emit(["error": "Vidéo illisible (format non pris en charge par macOS)."]); return
+        }
+        try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        let gen = AVAssetImageGenerator(asset: asset)
+        gen.appliesPreferredTrackTransform = true
+        gen.maximumSize = CGSize(width: 512, height: 512)
+        gen.requestedTimeToleranceBefore = CMTime(seconds: 0.5, preferredTimescale: 600)
+        gen.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
+        let n = max(4, min(12, Int(duration / 5)))
+        var frames: [[String: Any]] = []
+        for i in 0..<n {
+            let t = duration * (Double(i) + 0.5) / Double(n)
+            guard let (cg, _) = try? await gen.image(at: CMTime(seconds: t, preferredTimescale: 600)) else { continue }
+            let rep = NSBitmapImageRep(cgImage: cg)
+            guard let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.85]) else { continue }
+            let file = out.appendingPathComponent(String(format: "frame-%02d.jpg", i))
+            if (try? jpg.write(to: file)) != nil { frames.append(["t": t, "path": file.path]) }
+        }
+        var result: [String: Any] = ["duration": duration, "frames": frames]
+        let (text, note) = await transcribe(url, asset: asset)
+        result["transcript"] = text
+        if let note { result["transcript_note"] = note }
+        emit(result)
+    }
+
+    static func transcribe(_ url: URL, asset: AVURLAsset) async -> (String, String?) {
+        guard let tracks = try? await asset.loadTracks(withMediaType: .audio), !tracks.isEmpty else { return ("", "Pas de piste audio.") }
+        let auth = await withCheckedContinuation { c in SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) } }
+        guard auth == .authorized else { return ("", "Transcription non autorisée (Réglages Système › Confidentialité et sécurité › Reconnaissance vocale).") }
+        let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "fr-FR")) ?? SFSpeechRecognizer()
+        guard let recognizer, recognizer.isAvailable else { return ("", "Reconnaissance vocale indisponible.") }
+        let request = SFSpeechURLRecognitionRequest(url: url)
+        if recognizer.supportsOnDeviceRecognition { request.requiresOnDeviceRecognition = true }
+        else { return ("", "La reconnaissance vocale locale n'est pas installée (Réglages Système › Clavier › Dictée) : transcription ignorée pour ne rien envoyer en ligne.") }
+        request.addsPunctuation = true
+        request.shouldReportPartialResults = false
+        let text: String = await withCheckedContinuation { c in
+            var resumed = false
+            let lock = NSLock()
+            func finish(_ s: String) { lock.lock(); defer { lock.unlock() }; if !resumed { resumed = true; c.resume(returning: s) } }
+            let task = recognizer.recognitionTask(with: request) { result, error in
+                if let result, result.isFinal { finish(result.bestTranscription.formattedString) }
+                else if error != nil { finish(result?.bestTranscription.formattedString ?? "") }
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 90) { task.cancel(); finish("") }
+        }
+        return (text, text.isEmpty ? "Aucune parole reconnue." : nil)
     }
 }

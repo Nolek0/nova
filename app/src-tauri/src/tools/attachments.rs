@@ -9,6 +9,7 @@ pub fn kind_of(path: &Path) -> &'static str {
     match ext.as_str() {
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "heic" | "bmp" | "tiff" | "tif" => "image",
         "pdf" => "pdf",
+        "mp4" | "mov" | "m4v" | "avi" | "mkv" | "webm" | "3gp" => "video",
         "txt" | "md" | "csv" | "tsv" | "json" | "yaml" | "yml" | "toml" | "xml" | "html" | "css" | "js" | "ts" | "tsx" | "jsx" | "py" | "rs"
         | "swift" | "c" | "h" | "cpp" | "hpp" | "java" | "kt" | "go" | "rb" | "php" | "sh" | "zsh" | "sql" | "tex" | "log" | "ini" => "text",
         _ => "other",
@@ -51,6 +52,7 @@ pub async fn extract_text(att: &Attachment) -> Option<String> {
         .map(|t| t.chars().take(200_000).collect::<String>())
         .filter(|t| !t.trim().is_empty()),
         "image" => crate::llm::apple::ocr(&path).await,
+        "video" => crate::nova::vision::analyze_video(&path).await,
         _ => None,
     }
 }

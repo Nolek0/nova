@@ -2,7 +2,7 @@
 name = "nova1"
 version = "1.0.0"
 edition = "2021"
-description = "Nova 1 : modèle de compréhension des commandes de NOVA, créé et entraîné de zéro (aucune dépendance)."
+description = "Nova 1 : modèles de NOVA (compréhension des demandes, vision), créés et entraînés de zéro (aucune dépendance)."
 publish = false
 
 [lib]
@@ -11,6 +11,10 @@ name = "nova1"
 [[bin]]
 name = "nova1-train"
 path = "src/bin/train.rs"
+
+[[bin]]
+name = "nova1-train-vision"
+path = "src/bin/train_vision.rs"
 
 [dependencies]
 

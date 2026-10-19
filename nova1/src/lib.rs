@@ -17,6 +17,7 @@
 //! L'apprentissage (rétropropagation et Adam) est écrit à la main, plus bas.
 
 pub mod text;
+pub mod vision;
 
 use std::io::{Read, Write};
 use text::{features, tokenize, Token};

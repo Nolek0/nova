@@ -515,4 +515,12 @@ export default {
  "Passe la souris sur l'encoche (ou sur la petite pastille en haut des écrans externes) : choisis Nova Chat ou Nova Code et le modèle, puis pose ta question sans quitter ce que tu fais.": "Leka souris likoló ya notch (to likoló ya bouton moke na ba écran ya libándá): pona Nova Chat to Nova Code mpe modèle, sima tuná kozanga kotika oyo ozali kosala.",
  "Vérifier automatiquement sur Wikipédia les questions d'actualité (dirigeants, « actuel »…)": "Kotala yango moko na Wikipédia mituna ya sika (bakambi, « ya sikoyo »…)",
  "Seule la question est envoyée à Wikipédia, et la source est affichée sous la réponse. Désactivé : NOVA répond avec les connaissances du modèle, qui peuvent dater.": "Kaka motuna nde etindamaka na Wikipédia, mpe esika euti eyebisami na nse ya eyano. Soki ekangami, NOVA ezongisaka na boyebi ya modèle, oyo ekoki kozala ya kala.",
+ "Enregistrer en PNG": "Bomba lokola PNG",
+ "Enregistré": "Ebombami",
+ "Utiliser Nova 1": "Salelá Nova 1",
+ "créé par NOVA, entraîné de zéro": "esalemi na NOVA, eteyami banda ebandeli",
+ "Le modèle maison de NOVA, ultra rapide (moins d'une milliseconde) et sans téléchargement. Il répond seul aux demandes simples, quel que soit le modèle choisi, et peut être utilisé à part entière.": "Modèle ya NOVA moko: ya mbangu mingi (na nse ya milliseconde moko), kozanga kokita eloko. Ezongisaka yango moko na mituna ya pete, ata modèle nini oponi, mpe ekoki kosalelama yango moko.",
+ "Pour une conversation libre, des explications ou du code, utilise un modèle de conversation ci-dessous (Gemma 4…).": "Mpo na lisolo ya bonsomi, ndimbola to kode, salelá modèle ya lisolo awa na nse (Gemma 4…).",
+ "Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi": "Biyano ya noki ya Nova 1 mpo na mituna ya pete (mbote, ngonga, mokolo, dé, masapo), ata modèle nini",
+ "Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.": "Bililingi (« salá motoko ») esalemaka ntango nyonso na Nova 1. Soki ekangami, mituna ya mike ekendaka na modèle oyo oponi.",
 };

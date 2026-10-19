@@ -9,3 +9,6 @@ build/
 Thumbs.db
 dist/
 nova1/target/
+
+# Images d'entraînement de Nova 1 Vision (téléchargées, non versionnées)
+nova1/data/images/

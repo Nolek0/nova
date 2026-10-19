@@ -192,7 +192,25 @@ pub async fn respond(state: &AppState, user: Message, mut reply: Message, histor
         let _ = channel.send(Event::Meta { meta: reply.meta.clone() });
     };
 
-    let result: Result<(), String> = match route {
+    // Nova 1 : première couche instantanée (petites demandes, dessins), ou modèle choisi à part entière.
+    let nova_selected = opts.model_id.as_deref() == Some(crate::nova::MODEL_ID);
+    let nova_reply = if opts.is_code() || !matches!(route, Route::Model) {
+        None
+    } else if nova_selected {
+        Some(crate::nova::respond(&user.content, &user.attachments, &settings))
+    } else {
+        let fast = settings.get("nova1Fast").map(|v| v != "0").unwrap_or(true);
+        crate::nova::first_layer(&user.content, &user.attachments, &settings, fast)
+    };
+
+    let result: Result<(), String> = if let Some(r) = nova_reply {
+        reply.meta.tool = Some(r.tool.into());
+        reply.meta.engine = Some("Nova 1 (sur l'appareil)".into());
+        reply.meta.model = Some("Nova 1".into());
+        reply.content = r.content;
+        Ok(())
+    } else {
+        match route {
         Route::Math(req) => {
             reply.meta.tool = Some("Mathématiques".into());
             reply.meta.engine = Some("Outil local".into());
@@ -282,6 +300,7 @@ pub async fn respond(state: &AppState, user: Message, mut reply: Message, histor
             let web = if opts.web { Some(user.content.clone()) } else if auto { Some(tools::web::question_to_query(&user.content)) } else { None };
             generate(state, &user, &mut reply, &history, &opts, web, &cancel, channel).await
         }
+    }
     };
 
     send_meta(&reply);
@@ -320,6 +339,15 @@ async fn generate(
         .or_else(|| models.first())
         .cloned()
         .ok_or_else(|| "Aucun modèle d'IA n'est disponible. Ouvre la page Modèles pour en installer un (gratuit).".to_string())?;
+    // Nova 1 n'est pas un modèle de conversation : pour une recherche Web ou une génération libre,
+    // on prend le premier modèle de conversation disponible.
+    if model.provider == "nova1" {
+        model = models
+            .iter()
+            .find(|m| m.provider != "nova1")
+            .cloned()
+            .ok_or_else(|| "Nova 1 ne fait pas de conversation libre. Installe un modèle de conversation (gratuit) dans la page Modèles, par exemple Gemma 4.".to_string())?;
+    }
     // Image jointe : on passe automatiquement sur un modèle qui voit les images, s'il y en a un.
     if user.attachments.iter().any(|a| a.kind == "image") && !model.vision {
         if let Some(v) = models.iter().find(|m| m.vision) {

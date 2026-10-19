@@ -515,4 +515,12 @@ export default {
  "Passe la souris sur l'encoche (ou sur la petite pastille en haut des écrans externes) : choisis Nova Chat ou Nova Code et le modèle, puis pose ta question sans quitter ce que tu fais.": "Passe o cursor pelo notch (ou pela pequena pílula no topo das telas externas): escolha Nova Chat ou Nova Code e o modelo, e pergunte sem sair do que está fazendo.",
  "Vérifier automatiquement sur Wikipédia les questions d'actualité (dirigeants, « actuel »…)": "Verificar automaticamente na Wikipédia as perguntas de atualidade (líderes, “atual”…)",
  "Seule la question est envoyée à Wikipédia, et la source est affichée sous la réponse. Désactivé : NOVA répond avec les connaissances du modèle, qui peuvent dater.": "Apenas a pergunta é enviada à Wikipédia, e a fonte aparece abaixo da resposta. Desativado: o NOVA responde com o conhecimento do modelo, que pode estar desatualizado.",
+ "Enregistrer en PNG": "Salvar como PNG",
+ "Enregistré": "Salvo",
+ "Utiliser Nova 1": "Usar o Nova 1",
+ "créé par NOVA, entraîné de zéro": "criado pelo NOVA, treinado do zero",
+ "Le modèle maison de NOVA, ultra rapide (moins d'une milliseconde) et sans téléchargement. Il répond seul aux demandes simples, quel que soit le modèle choisi, et peut être utilisé à part entière.": "O modelo próprio do NOVA: ultrarrápido (menos de um milissegundo) e sem download. Responde sozinho aos pedidos simples, seja qual for o modelo escolhido, e pode ser usado por si só.",
+ "Pour une conversation libre, des explications ou du code, utilise un modèle de conversation ci-dessous (Gemma 4…).": "Para conversa livre, explicações ou código, use um modelo de conversa abaixo (Gemma 4…).",
+ "Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi": "Respostas instantâneas do Nova 1 para pedidos simples (saudações, hora, data, dado, piadas), seja qual for o modelo",
+ "Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.": "Os desenhos (“desenhe um gato”) são sempre feitos pelo Nova 1. Desativado: os pedidos simples vão para o modelo escolhido.",
 };

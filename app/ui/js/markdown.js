@@ -31,6 +31,31 @@ export function wireMarkdown(root) {
       setTimeout(() => (btn.innerHTML = `${icon('copy')}<span>Copier</span>`), 1500);
     };
   });
+  // Dessins de Nova 1 : bouton pour les enregistrer en PNG.
+  root.querySelectorAll('img[src^="data:image/svg+xml"]').forEach((img) => {
+    if (img.parentElement?.classList.contains('drawing')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'drawing';
+    img.replaceWith(wrap);
+    wrap.appendChild(img);
+    const btn = document.createElement('button');
+    btn.className = 'btn small';
+    btn.innerHTML = `${icon('download')}<span>Enregistrer en PNG</span>`;
+    btn.onclick = async () => {
+      const path = await window.__TAURI__.dialog.save({ defaultPath: 'dessin-nova.png', filters: [{ name: 'Image PNG', extensions: ['png'] }] });
+      if (!path) return;
+      const im = new Image();
+      im.src = img.src;
+      await im.decode();
+      const c = document.createElement('canvas');
+      c.width = (im.naturalWidth || 640) * 2;
+      c.height = (im.naturalHeight || 440) * 2;
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      const b64 = c.toDataURL('image/png').split(',')[1];
+      try { await invoke('save_base64_file', { path, data: b64 }); btn.innerHTML = `${icon('check')}<span>Enregistré</span>`; } catch (e) { btn.textContent = String(e); }
+    };
+    wrap.appendChild(btn);
+  });
   root.querySelectorAll('a[href]').forEach((a) => {
     a.onclick = (e) => {
       e.preventDefault();

@@ -34,6 +34,8 @@ flate2 = "1"
 pdf-extract = "0.7"
 sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 base64 = "0.22"
+nova1 = { path = "../../nova1" }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp"] }
 open = "5"
 dirs = "5"
 urlencoding = "2"

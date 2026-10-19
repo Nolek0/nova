@@ -359,7 +359,7 @@ TRAPS_TEST = ["comment ouvrir une bouteille de vin", "le temps de cuisson des p�
 AUTRE_FORMS = ["comment on fait {t}", "j'ai une question sur {t}", "je suis nul en {t}", "tu connais {t} ?", "qu'est-ce que tu penses de {t}",
                "raconte-moi l'histoire de {t}", "écris un texte sur {t}", "donne-moi des conseils pour {t}", "qui a inventé {t}",
                "c'est quoi le lien entre {t} et l'école", "aide-moi pour {t}", "est-ce que {t} c'est difficile", "{t} ou pas ?",
-               "explique-moi {t}", "c'est quoi {t}", "parle-moi de {t}", "résume {t}", "donne-moi un exemple sur {t}",
+               "explique-moi {t}", "c'est quoi {t}", "parle-moi de {t}", "donne-moi un exemple sur {t}",
                "j'ai un exposé sur {t}, tu peux m'aider", "fais un plan sur {t}", "quelle est l'origine de {t}", "pourquoi {t} est important",
                "écris un poème sur {t}", "donne-moi 3 idées sur {t}", "je comprends pas {t}", "quiz sur {t}", "{t} expliqué simplement",
                "qu'est-ce que {t}", "définition de {t}", "comment on étudie {t}"]
@@ -375,7 +375,38 @@ def gen_autre(rng, test):
 
 GENERATORS["autre"] = gen_autre
 
-COUNTS = {"autre": 9000, "comment_ca_va": 700, "annuler_minuteur": 600, "identite": 600, "minuteur": 2200, "ouvrir_app": 2200, "meteo": 1800, "note": 1300, "ouvrir_site": 1200, "chercher_fichier": 1100,
+# Dessins (Nova 1 Dessin) : le sujet est repéré pour être dessiné.
+DRAW_SUBJECTS = ["un canard", "un chat", "un chien", "une maison", "un arbre", "un soleil", "une voiture", "une fleur", "une montagne",
+                 "un poisson", "un oiseau", "un coeur", "une étoile", "un bateau", "un nuage", "un canard sur un lac", "un chat sous la pluie",
+                 "une maison avec un arbre", "un coucher de soleil sur la mer", "une fleur rouge", "un chien dans un parc", "la lune",
+                 "un sapin", "une pomme", "un papillon", "un champignon", "une fusée", "un robot", "un bonhomme de neige", "un arc-en-ciel",
+                 "deux canards", "un poisson bleu", "une voiture rouge", "un paysage de montagne", "une plage", "une forêt", "une ville la nuit"]
+DRAW_SUBJECTS_TEST = ["un lapin", "une tortue", "un château", "un hibou", "un cactus", "trois étoiles jaunes"]
+DRAW_FORMS = ["dessine {s}", "dessine-moi {s}", "fais un dessin de {s}", "fais-moi un dessin de {s}", "tu peux dessiner {s}",
+              "génère une image de {s}", "crée une image de {s}", "fais une image de {s}", "montre-moi un dessin de {s}",
+              "j'aimerais un dessin de {s}", "dessiner {s}", "fais-moi {s} en dessin", "image de {s}", "un dessin de {s} stp",
+              "illustre {s}", "dessine {s} pour moi", "draw {s}"]
+DRAW_FORMS_TEST = ["gribouille {s}", "peux-tu me faire une illustration de {s}", "réalise un dessin de {s}"]
+
+
+def gen_dessin(rng, test):
+    sub = rng.choice(DRAW_SUBJECTS_TEST if test else DRAW_SUBJECTS)
+    form = rng.choice(DRAW_FORMS_TEST if test else DRAW_FORMS)
+    return polite(rng, form.format(s=sub)), [("sujet", sub)]
+
+
+# Résumés (Nova 1 Résumé) : résumer le document joint ou le texte collé.
+RESUME_FORMS = ["résume ce document", "résume ce pdf", "résume ce texte", "fais un résumé du document", "résume-moi ça",
+                "fais-moi un résumé", "résumé de ce pdf", "tu peux résumer ce fichier", "donne-moi les points clés", "résume le fichier",
+                "les idées principales de ce document", "fais une synthèse de ce texte", "résume en quelques lignes", "c'est quoi l'essentiel de ce pdf",
+                "résume cet article", "tl;dr", "résume", "fais court", "résume ce cours", "extrais les phrases importantes", "résume le pdf joint",
+                "donne-moi un résumé de ce texte :", "résume ceci :", "résume ce texte : la photosynthèse est un processus"]
+RESUME_FORMS_TEST = ["condense ce document", "sors-moi l'essentiel de ce texte", "en bref, ça dit quoi ce pdf"]
+
+GENERATORS["dessin"] = gen_dessin
+GENERATORS["resume"] = simple(RESUME_FORMS, RESUME_FORMS_TEST)
+
+COUNTS = {"autre": 9000, "dessin": 1600, "resume": 700, "comment_ca_va": 700, "annuler_minuteur": 600, "identite": 600, "minuteur": 2200, "ouvrir_app": 2200, "meteo": 1800, "note": 1300, "ouvrir_site": 1200, "chercher_fichier": 1100,
           "recherche_web": 900, "calcul": 1100, "conversion": 900, "lancer_de": 500}
 DEFAULT_COUNT = 450
 

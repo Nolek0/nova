@@ -43,6 +43,13 @@ export function render(v, ctx) {
   theme.value = s.appearance || 'dark';
   theme.onchange = async () => { await ctx.setSetting('appearance', theme.value); ctx.applyTheme(); };
 
+  // Nova 1
+  const n1 = group('Nova 1', 'sparkles', `<label class="row"><input type="checkbox" id="n1fast"> Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi</label>
+    <div class="faint">Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.</div>`);
+  const n1b = n1.querySelector('#n1fast');
+  n1b.checked = s.nova1Fast !== '0';
+  n1b.onchange = () => ctx.setSetting('nova1Fast', n1b.checked ? '1' : '0');
+
   // Nova Code
   const nc = group('Nova Code', 'code', `<label class="row"><input type="checkbox" id="nc"> Activer Nova Code (onglet « Code » pour travailler sur tes projets)</label>
     <div class="faint">Nova Code lit uniquement le dossier de projet que tu choisis. Il propose des modifications que tu relis (différences) avant de les appliquer ; l'ancienne version de chaque fichier est sauvegardée.</div>`);

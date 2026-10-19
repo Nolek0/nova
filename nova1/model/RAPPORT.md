@@ -4,27 +4,26 @@ Modèle de compréhension des commandes de NOVA, créé et entraîné de zéro (
 
 | | |
 |---|---|
-| Paramètres | 1620422 |
+| Paramètres | 1621002 |
 | Taille du fichier | 1.9 Mo |
-| Intentions | 23 |
-| Exemples d'entraînement | 28100 |
-| Durée d'entraînement | 68 s |
+| Intentions | 25 |
+| Exemples d'entraînement | 30404 |
+| Durée d'entraînement | 74 s |
 | Temps d'analyse moyen | 0.07 ms par phrase |
 
 ## Précision
 
 | Jeu | Intention | Informations extraites |
 |---|---|---|
-| Entraînement (échantillon) | 100.0 % | 97.2 % |
-| Test (vocabulaire jamais vu) | 88.8 % | 72.7 % |
-| Phrases réalistes écrites à la main | 98.6 % | 92.0 % |
+| Entraînement (échantillon) | 100.0 % | 98.4 % |
+| Test (vocabulaire jamais vu) | 91.3 % | 76.9 % |
+| Phrases réalistes écrites à la main | 97.3 % | 100.0 % |
 
 ## Intentions
 
-`autre`, `annuler_minuteur`, `au_revoir`, `blague`, `calcul`, `capacites`, `chercher_fichier`, `comment_ca_va`, `conversion`, `date`, `heure`, `identite`, `infos_systeme`, `lancer_de`, `meteo`, `minuteur`, `note`, `ouvrir_app`, `ouvrir_site`, `pile_ou_face`, `recherche_web`, `remerciement`, `salutation`
+`autre`, `annuler_minuteur`, `au_revoir`, `blague`, `calcul`, `capacites`, `chercher_fichier`, `comment_ca_va`, `conversion`, `date`, `dessin`, `heure`, `identite`, `infos_systeme`, `lancer_de`, `meteo`, `minuteur`, `note`, `ouvrir_app`, `ouvrir_site`, `pile_ou_face`, `recherche_web`, `remerciement`, `resume`, `salutation`
 
 ## Erreurs restantes (phrases réalistes)
 
-- « bon je vais dormir, bonne nuit » → autre (54 %) au lieu de au_revoir
-- « crée une note réviser l'anglais ce soir » : infos [("contenu", "réviser l'anglais"), ("contenu", "soir")] au lieu de [("contenu", "réviser l'anglais ce soir")]
-- « cherche sur internet la coupe du monde 2026 » : infos [("requete", "2026"), ("requete", "la")] au lieu de [("requete", "la coupe du monde 2026")]
+- « résume la révolution française en 5 lignes » → resume (63 %) au lieu de autre
+- « combien d'habitants en belgique » → conversion (32 %) au lieu de autre

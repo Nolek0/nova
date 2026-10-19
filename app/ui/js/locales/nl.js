@@ -515,4 +515,12 @@ export default {
  "Passe la souris sur l'encoche (ou sur la petite pastille en haut des écrans externes) : choisis Nova Chat ou Nova Code et le modèle, puis pose ta question sans quitter ce que tu fais.": "Ga met de aanwijzer over de notch (of het pilletje bovenaan externe schermen): kies Nova Chat of Nova Code en het model, en stel je vraag zonder je werk te verlaten.",
  "Vérifier automatiquement sur Wikipédia les questions d'actualité (dirigeants, « actuel »…)": "Actuele vragen automatisch controleren op Wikipedia (leiders, ‘huidige’…)",
  "Seule la question est envoyée à Wikipédia, et la source est affichée sous la réponse. Désactivé : NOVA répond avec les connaissances du modèle, qui peuvent dater.": "Alleen de vraag wordt naar Wikipedia gestuurd, en de bron staat onder het antwoord. Uitgeschakeld antwoordt NOVA met de kennis van het model, die verouderd kan zijn.",
+ "Enregistrer en PNG": "Opslaan als PNG",
+ "Enregistré": "Opgeslagen",
+ "Utiliser Nova 1": "Nova 1 gebruiken",
+ "créé par NOVA, entraîné de zéro": "gemaakt door NOVA, vanaf nul getraind",
+ "Le modèle maison de NOVA, ultra rapide (moins d'une milliseconde) et sans téléchargement. Il répond seul aux demandes simples, quel que soit le modèle choisi, et peut être utilisé à part entière.": "Het eigen model van NOVA: supersnel (minder dan een milliseconde), niets te downloaden. Het beantwoordt eenvoudige vragen zelf, welk model ook gekozen is, en kan ook op zichzelf gebruikt worden.",
+ "Pour une conversation libre, des explications ou du code, utilise un modèle de conversation ci-dessous (Gemma 4…).": "Gebruik voor vrije gesprekken, uitleg of code een gespreksmodel hieronder (Gemma 4…).",
+ "Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi": "Directe antwoorden van Nova 1 op eenvoudige vragen (begroetingen, tijd, datum, dobbelsteen, grappen), welk model ook",
+ "Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.": "Tekeningen (‘teken een kat’) maakt Nova 1 altijd. Uitgeschakeld gaan kleine vragen naar het gekozen model.",
 };

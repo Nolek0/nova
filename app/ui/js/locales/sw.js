@@ -515,4 +515,12 @@ export default {
  "Passe la souris sur l'encoche (ou sur la petite pastille en haut des écrans externes) : choisis Nova Chat ou Nova Code et le modèle, puis pose ta question sans quitter ce que tu fais.": "Pitisha kipanya juu ya notch (au kidonge kidogo juu ya skrini za nje): chagua Nova Chat au Nova Code na modeli, kisha uliza bila kuacha unachofanya.",
  "Vérifier automatiquement sur Wikipédia les questions d'actualité (dirigeants, « actuel »…)": "Kagua kiotomatiki kwenye Wikipedia maswali ya sasa (viongozi, “wa sasa”…)",
  "Seule la question est envoyée à Wikipédia, et la source est affichée sous la réponse. Désactivé : NOVA répond avec les connaissances du modèle, qui peuvent dater.": "Swali pekee ndilo hutumwa kwa Wikipedia, na chanzo huonyeshwa chini ya jibu. Ikizimwa, NOVA hujibu kwa maarifa ya modeli, ambayo huenda yamepitwa na wakati.",
+ "Enregistrer en PNG": "Hifadhi kama PNG",
+ "Enregistré": "Imehifadhiwa",
+ "Utiliser Nova 1": "Tumia Nova 1",
+ "créé par NOVA, entraîné de zéro": "imeundwa na NOVA, imefunzwa kuanzia mwanzo",
+ "Le modèle maison de NOVA, ultra rapide (moins d'une milliseconde) et sans téléchargement. Il répond seul aux demandes simples, quel que soit le modèle choisi, et peut être utilisé à part entière.": "Modeli ya NOVA yenyewe: ya kasi sana (chini ya millisekunde moja), bila kupakua. Hujibu maombi rahisi yenyewe, bila kujali modeli iliyochaguliwa, na inaweza kutumika peke yake.",
+ "Pour une conversation libre, des explications ou du code, utilise un modèle de conversation ci-dessous (Gemma 4…).": "Kwa mazungumzo huru, maelezo au msimbo, tumia modeli ya mazungumzo hapa chini (Gemma 4…).",
+ "Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi": "Majibu ya papo hapo ya Nova 1 kwa maombi rahisi (salamu, saa, tarehe, kete, vichekesho), bila kujali modeli",
+ "Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.": "Michoro (“chora paka”) hufanywa na Nova 1 kila mara. Ikizimwa, maombi madogo huenda kwa modeli iliyochaguliwa.",
 };
