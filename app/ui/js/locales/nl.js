@@ -513,4 +513,6 @@ export default {
  "Bulle de l'encoche": "Notch-bubbel",
  "Afficher NOVA dans l'encoche du Mac et en haut de chaque écran": "NOVA tonen in de notch van de Mac en bovenaan elk scherm",
  "Passe la souris sur l'encoche (ou sur la petite pastille en haut des écrans externes) : choisis Nova Chat ou Nova Code et le modèle, puis pose ta question sans quitter ce que tu fais.": "Ga met de aanwijzer over de notch (of het pilletje bovenaan externe schermen): kies Nova Chat of Nova Code en het model, en stel je vraag zonder je werk te verlaten.",
+ "Vérifier automatiquement sur Wikipédia les questions d'actualité (dirigeants, « actuel »…)": "Actuele vragen automatisch controleren op Wikipedia (leiders, ‘huidige’…)",
+ "Seule la question est envoyée à Wikipédia, et la source est affichée sous la réponse. Désactivé : NOVA répond avec les connaissances du modèle, qui peuvent dater.": "Alleen de vraag wordt naar Wikipedia gestuurd, en de bron staat onder het antwoord. Uitgeschakeld antwoordt NOVA met de kennis van het model, die verouderd kan zijn.",
 };

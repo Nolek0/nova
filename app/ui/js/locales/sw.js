@@ -513,4 +513,6 @@ export default {
  "Bulle de l'encoche": "Kiputo cha notch",
  "Afficher NOVA dans l'encoche du Mac et en haut de chaque écran": "Onyesha NOVA kwenye notch ya Mac na juu ya kila skrini",
  "Passe la souris sur l'encoche (ou sur la petite pastille en haut des écrans externes) : choisis Nova Chat ou Nova Code et le modèle, puis pose ta question sans quitter ce que tu fais.": "Pitisha kipanya juu ya notch (au kidonge kidogo juu ya skrini za nje): chagua Nova Chat au Nova Code na modeli, kisha uliza bila kuacha unachofanya.",
+ "Vérifier automatiquement sur Wikipédia les questions d'actualité (dirigeants, « actuel »…)": "Kagua kiotomatiki kwenye Wikipedia maswali ya sasa (viongozi, “wa sasa”…)",
+ "Seule la question est envoyée à Wikipédia, et la source est affichée sous la réponse. Désactivé : NOVA répond avec les connaissances du modèle, qui peuvent dater.": "Swali pekee ndilo hutumwa kwa Wikipedia, na chanzo huonyeshwa chini ya jibu. Ikizimwa, NOVA hujibu kwa maarifa ya modeli, ambayo huenda yamepitwa na wakati.",
 };

@@ -513,4 +513,6 @@ export default {
  "Bulle de l'encoche": "Bul notch",
  "Afficher NOVA dans l'encoche du Mac et en haut de chaque écran": "Afiche NOVA nan notch Mac la ak anlè chak ekran",
  "Passe la souris sur l'encoche (ou sur la petite pastille en haut des écrans externes) : choisis Nova Chat ou Nova Code et le modèle, puis pose ta question sans quitter ce que tu fais.": "Pase sourit la sou notch la (oswa sou ti grenn anlè ekran ekstèn yo): chwazi Nova Chat oswa Nova Code ak modèl la, epi poze kesyon ou san kite sa w ap fè a.",
+ "Vérifier automatiquement sur Wikipédia les questions d'actualité (dirigeants, « actuel »…)": "Verifye otomatikman sou Wikipedya kesyon sou aktyalite (dirijan, « aktyèl »…)",
+ "Seule la question est envoyée à Wikipédia, et la source est affichée sous la réponse. Désactivé : NOVA répond avec les connaissances du modèle, qui peuvent dater.": "Se sèlman kesyon an ki voye bay Wikipedya, epi sous la parèt anba repons lan. Lè l etenn, NOVA reponn ak sa modèl la konnen, ki ka pa ajou.",
 };

@@ -513,4 +513,6 @@ export default {
  "Bulle de l'encoche": "Bulle ya notch",
  "Afficher NOVA dans l'encoche du Mac et en haut de chaque écran": "Lakisá NOVA na notch ya Mac mpe likoló ya ba écran nyonso",
  "Passe la souris sur l'encoche (ou sur la petite pastille en haut des écrans externes) : choisis Nova Chat ou Nova Code et le modèle, puis pose ta question sans quitter ce que tu fais.": "Leka souris likoló ya notch (to likoló ya bouton moke na ba écran ya libándá): pona Nova Chat to Nova Code mpe modèle, sima tuná kozanga kotika oyo ozali kosala.",
+ "Vérifier automatiquement sur Wikipédia les questions d'actualité (dirigeants, « actuel »…)": "Kotala yango moko na Wikipédia mituna ya sika (bakambi, « ya sikoyo »…)",
+ "Seule la question est envoyée à Wikipédia, et la source est affichée sous la réponse. Désactivé : NOVA répond avec les connaissances du modèle, qui peuvent dater.": "Kaka motuna nde etindamaka na Wikipédia, mpe esika euti eyebisami na nse ya eyano. Soki ekangami, NOVA ezongisaka na boyebi ya modèle, oyo ekoki kozala ya kala.",
 };

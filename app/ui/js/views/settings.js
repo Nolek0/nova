@@ -138,12 +138,17 @@ export function render(v, ctx) {
   };
 
   // Confidentialité
-  group('Confidentialité et réseau', 'shield', `<div class="stack" style="gap:6px;font-size:13px">
+  const pr = group('Confidentialité et réseau', 'shield', `<div class="stack" style="gap:6px;font-size:13px">
     <div>✅ Conversations, réglages et mémoire : stockés sur cet ordinateur (SQLite).</div>
     <div>✅ IA : exécutée localement (llama.cpp${ctx.isMac() ? ', modèle Apple' : ''}${ctx.state.models.some((m) => m.provider === 'ollama') ? ', Ollama' : ''}).</div>
     <div>✅ Texte des PDF et images : extrait localement.</div>
-    <div>🌐 Envoyé sur Internet uniquement quand tu le demandes : météo (Open-Meteo), mode Internet (Wikipédia), téléchargement de modèles (GitHub, Hugging Face). Chaque réponse concernée porte le badge « Internet ».</div>
+    <div>🌐 Envoyé sur Internet uniquement quand tu le demandes : météo (Open-Meteo), mode Internet et questions d'actualité (Wikipédia), téléchargement de modèles (GitHub, Hugging Face). Chaque réponse concernée porte le badge « Internet ».</div>
     <div>🛡️ Actions sur l’ordinateur : toujours affichées et soumises à ton accord avant exécution.</div></div>`);
+  pr.appendChild(el(`<label class="row"><input type="checkbox" id="autoweb"> Vérifier automatiquement sur Wikipédia les questions d'actualité (dirigeants, « actuel »…)</label>`));
+  pr.appendChild(el(`<div class="faint">Seule la question est envoyée à Wikipédia, et la source est affichée sous la réponse. Désactivé : NOVA répond avec les connaissances du modèle, qui peuvent dater.</div>`));
+  const aw = pr.querySelector('#autoweb');
+  aw.checked = s.autoWeb !== '0';
+  aw.onchange = () => ctx.setSetting('autoWeb', aw.checked ? '1' : '0');
 
   // Données
   const da = group('Données', 'download', `<div class="row"><button class="btn" id="export">Exporter toutes les données (JSON)…</button><button class="btn" id="activity">Journal d’activité</button><button class="btn danger" id="wipe">Tout supprimer…</button></div><div class="faint">Notes créées par NOVA : ${esc(ctx.state.notesDir || '')}</div>`);

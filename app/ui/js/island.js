@@ -100,6 +100,7 @@ async function ask(text) {
       if (frame) cancelAnimationFrame(frame);
       const m = ev.message;
       paint(answer, m.content, '', true, m.status === 'failed' ? m.meta?.error || 'La génération a échoué.' : null);
+      if (m.meta?.sources?.length) answer.appendChild(el(`<div class="faint isl-src">${icon('globe')} <span>Source :</span> <span translate="no">${m.meta.sources.map((x) => esc(x.title)).join(' · ')}</span></div>`));
       if (m.meta?.action) answer.appendChild(el(`<div class="faint">Action proposée : ${esc(m.meta.action.title)}. Clique « Ouvrir » pour l'autoriser dans NOVA.</div>`));
       if (mode === 'code' && settings.codeProject && /```/.test(m.content || '')) answer.appendChild(el(`<div class="faint">Clique « Ouvrir » pour relire et appliquer le code dans Nova Code.</div>`));
       thread.scrollTop = thread.scrollHeight;
