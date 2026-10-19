@@ -63,6 +63,16 @@ pub struct Conversation {
     pub created_at: f64,
     pub updated_at: f64,
     pub pinned: bool,
+    /// « chat » (NOVA) ou « code » (Nova Code).
+    #[serde(default = "default_kind")]
+    pub kind: String,
+    /// Dossier du projet pour Nova Code.
+    #[serde(default)]
+    pub project: Option<String>,
+}
+
+fn default_kind() -> String {
+    "chat".into()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -132,24 +142,29 @@ impl Db {
             CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT NOT NULL, fetched_at REAL NOT NULL);
             "#,
         )?;
+        // Migration : type de conversation et projet (Nova Code).
+        let cols: Vec<String> = conn.prepare("PRAGMA table_info(conversations)")?.query_map([], |r| r.get::<_, String>(1))?.collect::<rusqlite::Result<_>>()?;
+        if !cols.iter().any(|c| c == "kind") {
+            conn.execute_batch("ALTER TABLE conversations ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'; ALTER TABLE conversations ADD COLUMN project TEXT;")?;
+        }
         Ok(Db { conn })
     }
 
     // ---- Conversations
 
     pub fn conversations(&self) -> Result<Vec<Conversation>> {
-        let mut st = self.conn.prepare("SELECT id, title, created_at, updated_at, pinned FROM conversations ORDER BY pinned DESC, updated_at DESC")?;
+        let mut st = self.conn.prepare("SELECT id, title, created_at, updated_at, pinned, kind, project FROM conversations ORDER BY pinned DESC, updated_at DESC")?;
         let rows = st.query_map([], |r| {
-            Ok(Conversation { id: r.get(0)?, title: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)?, pinned: r.get::<_, i64>(4)? != 0 })
+            Ok(Conversation { id: r.get(0)?, title: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)?, pinned: r.get::<_, i64>(4)? != 0, kind: r.get(5)?, project: r.get(6)? })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn save_conversation(&self, c: &Conversation) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO conversations (id, title, created_at, updated_at, pinned) VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO conversations (id, title, created_at, updated_at, pinned, kind, project) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
              ON CONFLICT(id) DO UPDATE SET title = excluded.title, updated_at = excluded.updated_at, pinned = excluded.pinned",
-            params![c.id, c.title, c.created_at, c.updated_at, c.pinned as i64],
+            params![c.id, c.title, c.created_at, c.updated_at, c.pinned as i64, c.kind, c.project],
         )?;
         Ok(())
     }
@@ -157,8 +172,8 @@ impl Db {
     pub fn conversation(&self, id: &str) -> Result<Option<Conversation>> {
         Ok(self
             .conn
-            .query_row("SELECT id, title, created_at, updated_at, pinned FROM conversations WHERE id = ?1", [id], |r| {
-                Ok(Conversation { id: r.get(0)?, title: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)?, pinned: r.get::<_, i64>(4)? != 0 })
+            .query_row("SELECT id, title, created_at, updated_at, pinned, kind, project FROM conversations WHERE id = ?1", [id], |r| {
+                Ok(Conversation { id: r.get(0)?, title: r.get(1)?, created_at: r.get(2)?, updated_at: r.get(3)?, pinned: r.get::<_, i64>(4)? != 0, kind: r.get(5)?, project: r.get(6)? })
             })
             .optional()?)
     }
@@ -384,7 +399,7 @@ mod tests {
     #[test]
     fn roundtrip_search_and_truncate() {
         let db = Db::open(None).unwrap();
-        let c = Conversation { id: "c1".into(), title: "Chimie".into(), created_at: 1.0, updated_at: 1.0, pinned: false };
+        let c = Conversation { id: "c1".into(), title: "Chimie".into(), created_at: 1.0, updated_at: 1.0, pinned: false, kind: "chat".into(), project: None };
         db.save_conversation(&c).unwrap();
         let m1 = msg("c1", "user", "Quelle est la masse molaire de l'éthanol ?", 1.0);
         let m2 = msg("c1", "assistant", "46 g/mol", 2.0);

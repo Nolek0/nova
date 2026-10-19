@@ -30,9 +30,24 @@ pub struct Options {
     /// Réflexion approfondie (plus lent). Désactivée par défaut : réponse rapide.
     #[serde(default)]
     pub think: bool,
+    /// « chat » (défaut) ou « code » (Nova Code).
+    #[serde(default)]
+    pub mode: Option<String>,
+    /// Dossier du projet (Nova Code).
+    #[serde(default)]
+    pub project: Option<String>,
+    /// Fichier ouvert dans l'éditeur (Nova Code).
+    #[serde(default)]
+    pub open_file: Option<String>,
 }
 
-pub const BASE_INSTRUCTIONS: &str = "Tu es NOVA, l'assistant personnel de l'utilisateur sur son ordinateur. Réponds en français, sauf demande contraire.
+impl Options {
+    pub fn is_code(&self) -> bool {
+        self.mode.as_deref() == Some("code")
+    }
+}
+
+pub const BASE_INSTRUCTIONS: &str = "Tu es NOVA, l'assistant personnel de l'utilisateur sur son ordinateur.
 Sois clair, précis et structuré ; utilise le Markdown (titres courts, listes, tableaux si utile, blocs de code avec le langage indiqué).
 Tu sais expliquer, rédiger, résumer, traduire et écrire du code complet dans tous les langages courants : quand on te demande du code, écris-le directement.
 Règles :
@@ -55,10 +70,19 @@ pub fn build_request(
     history: &[Message],
     model: &ModelInfo,
     web_context: Option<&str>,
+    opts: Option<&Options>,
 ) -> GenRequest {
     let settings = state.settings();
     let budget = (context_tokens(model) as f64 * 2.8 * 0.55) as usize;
     let mut instructions = BASE_INSTRUCTIONS.to_string();
+    // Langue des réponses : choisie dans les paramètres, sinon celle de l'interface (ou du message).
+    match settings.get("replyLanguage").map(|s| s.trim()).filter(|s| !s.is_empty() && *s != "auto") {
+        Some(lang) => instructions += &format!("\nRéponds toujours en {lang}, quelle que soit la langue du message, sauf si l'utilisateur demande explicitement une autre langue."),
+        None => {
+            let ui = settings.get("uiLanguageName").cloned().unwrap_or_else(|| "Français".into());
+            instructions += &format!("\nRéponds dans la langue du message de l'utilisateur ; en cas de doute, utilise la langue de son interface : {ui}.");
+        }
+    }
     if let Some(name) = settings.get("userName").filter(|s| !s.is_empty()) {
         instructions += &format!("\nL'utilisateur s'appelle {name}.");
     }
@@ -77,6 +101,32 @@ pub fn build_request(
     instructions += &format!("\nDate du jour : {}.", chrono::Local::now().format("%A %d %B %Y"));
 
     let mut prompt = message.content.clone();
+    // Nova Code : instructions de programmation et contexte du projet.
+    if let Some(o) = opts.filter(|o| o.is_code()) {
+        instructions = instructions.replacen(BASE_INSTRUCTIONS, crate::code::INSTRUCTIONS, 1);
+        if let Some(root) = o.project.as_deref().map(std::path::Path::new) {
+            let tree = crate::code::tree(root, 300);
+            instructions += &format!("\n\nProjet : {}\nFichiers ({}{}):\n{}", root.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(), tree.len(), if tree.len() >= 300 { "+" } else { "" }, tree.join("\n"));
+            let mut files: Vec<String> = crate::code::mentions(&message.content);
+            if let Some(f) = &o.open_file {
+                if !files.contains(f) {
+                    files.insert(0, f.clone());
+                }
+            }
+            let mut room = budget / 2;
+            for f in files.iter().take(6) {
+                if let Ok(text) = crate::code::read(root, f) {
+                    let slice: String = text.chars().take(room).collect();
+                    room = room.saturating_sub(slice.chars().count());
+                    let cut = if slice.chars().count() < text.chars().count() { "\n[… fichier tronqué]" } else { "" };
+                    prompt += &format!("\n\n<<<Fichier {f}>>>\n{slice}{cut}\n<<<fin {f}>>>");
+                }
+                if room < 500 {
+                    break;
+                }
+            }
+        }
+    }
     let mut images = Vec::new();
     let mut att_budget = budget / 2;
     for att in &message.attachments {
@@ -134,7 +184,7 @@ pub async fn respond(state: &AppState, user: Message, mut reply: Message, histor
     let tools_enabled = settings.get("toolsEnabled").map(|v| v != "0").unwrap_or(true);
     let angle = if settings.get("angleMode").map(|s| s == "degrees").unwrap_or(false) { math::expr::AngleMode::Degrees } else { math::expr::AngleMode::Radians };
 
-    let route = if user.attachments.is_empty() { tools::route(&user.content, &allowed, tools_enabled) } else { Route::Model };
+    let route = if user.attachments.is_empty() && !opts.is_code() { tools::route(&user.content, &allowed, tools_enabled) } else { Route::Model };
     let send_meta = |reply: &Message| {
         let _ = channel.send(Event::Meta { meta: reply.meta.clone() });
     };
@@ -294,7 +344,7 @@ async fn generate(
     }
     let _ = channel.send(Event::Meta { meta: reply.meta.clone() });
 
-    let req = build_request(state, user, history, &model, web_context.as_deref());
+    let req = build_request(state, user, history, &model, web_context.as_deref(), Some(opts));
     let mut text = String::new();
     let mut reasoning = String::new();
     let produced = std::sync::atomic::AtomicBool::new(false);

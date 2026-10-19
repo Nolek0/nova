@@ -2,7 +2,10 @@
 
 pub mod appmenu;
 pub mod chat;
+pub mod code;
 pub mod db;
+#[cfg(target_os = "macos")]
+pub mod island;
 pub mod llm;
 pub mod math;
 #[cfg(target_os = "macos")]
@@ -258,7 +261,15 @@ async fn send_message(
         let cid = match conversation_id {
             Some(id) => id,
             None => {
-                let c = db::Conversation { id: uuid::Uuid::new_v4().to_string(), title: chat::title_from(&text), created_at: db::now(), updated_at: db::now(), pinned: false };
+                let c = db::Conversation {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    title: chat::title_from(&text),
+                    created_at: db::now(),
+                    updated_at: db::now(),
+                    pinned: false,
+                    kind: if options.is_code() { "code".into() } else { "chat".into() },
+                    project: options.project.clone(),
+                };
                 db.save_conversation(&c).map_err(err)?;
                 c.id
             }
@@ -686,6 +697,51 @@ fn set_menu_labels(app: tauri::AppHandle, labels: HashMap<String, String>) -> R<
     appmenu::install(&app, &labels).map_err(err)
 }
 
+// ---------------------------------------------------------------- Nova Code
+
+fn project_root(state: &AppState, project: &str) -> R<std::path::PathBuf> {
+    let p = std::path::PathBuf::from(project);
+    if !tools::files::is_allowed(&p, &state.allowed_folders()) {
+        return Err("Ce projet n'est pas dans un dossier autorisé.".into());
+    }
+    Ok(p)
+}
+
+/// Ouvre un projet choisi par l'utilisateur (le dossier devient un dossier autorisé).
+#[tauri::command]
+fn code_open_project(state: State<'_, AppState>, path: String) -> R<Vec<String>> {
+    let p = std::path::PathBuf::from(&path);
+    if !p.is_dir() {
+        return Err("Dossier introuvable.".into());
+    }
+    let mut folders: Vec<String> = state.allowed_folders().into_iter().map(|f| f.to_string_lossy().to_string()).collect();
+    if !tools::files::is_allowed(&p, &state.allowed_folders()) {
+        folders.push(path.clone());
+        state.db.lock().unwrap().set_setting("allowedFolders", &serde_json::to_string(&folders).map_err(err)?).map_err(err)?;
+    }
+    state.db.lock().unwrap().log("nova code", &format!("Projet ouvert : {path}"), "confirm", "réussi");
+    Ok(code::tree(&p, 3000))
+}
+
+#[tauri::command]
+fn code_tree(state: State<'_, AppState>, project: String) -> R<Vec<String>> {
+    Ok(code::tree(&project_root(&state, &project)?, 3000))
+}
+
+#[tauri::command]
+fn code_read(state: State<'_, AppState>, project: String, path: String) -> R<String> {
+    code::read(&project_root(&state, &project)?, &path).map_err(err)
+}
+
+/// Écrit un fichier après accord de l'utilisateur (bouton « Appliquer »), avec sauvegarde.
+#[tauri::command]
+fn code_write(state: State<'_, AppState>, project: String, path: String, content: String) -> R<Option<String>> {
+    let root = project_root(&state, &project)?;
+    let backup = code::write(&root, &path, &content, &state.data_dir.join("code-backups")).map_err(err)?;
+    state.db.lock().unwrap().log("nova code", &format!("Fichier écrit : {path}"), "confirm", "réussi");
+    Ok(backup.map(|b| b.to_string_lossy().to_string()))
+}
+
 // ---------------------------------------------------------------- Lancement
 
 pub fn run() {
@@ -711,6 +767,18 @@ pub fn run() {
             });
             #[cfg(target_os = "macos")]
             menubar::setup(app.handle())?;
+            #[cfg(target_os = "macos")]
+            {
+                let st = app.state::<AppState>();
+                let db = st.db.lock().unwrap();
+                let on = db.setting("novaCode").as_deref() == Some("1") && db.setting("notchIsland").as_deref() == Some("1");
+                drop(db);
+                if on {
+                    if let Err(e) = island::enable(app.handle()) {
+                        eprintln!("île de l'encoche : {e}");
+                    }
+                }
+            }
             appmenu::install(app.handle(), &HashMap::new())?;
             Ok(())
         })
@@ -745,7 +813,7 @@ pub fn run() {
             bootstrap, list_conversations, get_messages, rename_conversation, toggle_pin, delete_conversation, search, library,
             set_setting, add_memory, delete_memory, import_attachment, import_bytes, apple_camera,
             send_message, regenerate, cancel_generation, decide_action,
-            models_overview, install_engine, download_model, cancel_download, delete_model, warm_up, set_menu_labels,
+            models_overview, install_engine, download_model, cancel_download, delete_model, warm_up, set_menu_labels, code_open_project, code_tree, code_read, code_write,
             weather, search_places, set_allowed_folders, search_files, open_path, open_url, system_info,
             export_data, delete_all_conversations, activity_log, clear_activity, dictation_start, dictation_stop,
             math_eval, math_run, units_catalog, units_convert, stats_describe, probabilities, matrix_op, plot,
@@ -756,7 +824,15 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             menubar::quick_resize,
             #[cfg(target_os = "macos")]
-            menubar::quick_open_in_main
+            menubar::quick_open_in_main,
+            #[cfg(target_os = "macos")]
+            island::island_geometry,
+            #[cfg(target_os = "macos")]
+            island::set_notch_island,
+            #[cfg(target_os = "macos")]
+            island::island_open,
+            #[cfg(target_os = "macos")]
+            island::island_hold
         ])
         .build(tauri::generate_context!())
         .expect("erreur au démarrage de NOVA")

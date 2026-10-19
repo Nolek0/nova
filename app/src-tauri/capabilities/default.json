@@ -4,7 +4,8 @@
   "description": "Permissions de la fenêtre principale : commandes NOVA et sélecteurs de fichiers.",
   "windows": [
     "main",
-    "quick"
+    "quick",
+    "island"
   ],
   "permissions": [
     "core:default",

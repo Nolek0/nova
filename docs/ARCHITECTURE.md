@@ -15,6 +15,9 @@ NOVA is a [Tauri 2](https://tauri.app) application: a **Rust core** that does al
 | Tools | `src/tools/*`, `src/math/*` | Maths engine, units, weather, files, actions, Wikipedia, attachments, system info |
 | macOS helper | `apple/Sources/NovaAppleHelper` | Apple on-device model, Vision OCR, Continuity Camera, on-device dictation |
 | Menu bar | `src/menubar.rs`, `src/appmenu.rs` | Tray icon + floating mini chat; native application menu |
+| Nova Code | `src/code.rs`, `ui/js/views/code.js` | Project tree, safe read/write inside the chosen folder (no `..`, no absolute paths, backups before writing); code-mode prompts skip local tools and include the tree, the open file and `@mentioned` files |
+| Notch island | `src/island.rs`, `ui/island.html` | macOS: borderless window above the menu bar on the notched screen (measured with `NSScreen.safeAreaInsets`); a watcher thread folds/unfolds it from the pointer position and toggles click-through |
+| Languages | `ui/js/i18n.js`, `ui/js/locales/*.js` | UI written in French; text nodes and `title`/`placeholder`/`aria-label` are translated live from per-language dictionaries; AI content is never translated |
 | Nova 1 | `nova1/` | NOVA's own model, trained from scratch (see below) |
 
 ## Message flow

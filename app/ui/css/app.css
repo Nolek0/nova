@@ -85,7 +85,7 @@ svg.i { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-widt
 #dragbar { position: fixed; top: 0; left: 0; right: 0; height: 38px; z-index: 40; background: transparent; }
 :root[data-platform="macos"] #dragbar { left: 76px; }
 :root[data-platform="windows"] .titlebar { padding-left: 12px; }
-#view { flex: 1; min-height: 0; overflow: auto; }
+#view { flex: 1; min-height: 0; overflow: auto; position: relative; }
 
 /* ---------- Barre latérale */
 .brand { display: flex; align-items: center; gap: 9px; padding: 0 16px 12px; font-weight: 600; letter-spacing: 1.5px; font-size: 15px; }
@@ -350,3 +350,56 @@ canvas.plot { width: 100%; height: 340px; display: block; }
 .dl .icon-btn { width: 20px; height: 20px; }
 .dl .icon-btn svg { width: 11px; height: 11px; }
 .dl .faint { font-size: 10.5px; font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------- Nova Code */
+.mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 3px; margin: 0 2px 8px; background: var(--hover); border-radius: 10px; }
+.mode-tabs button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 28px; border: 0; border-radius: 8px; background: transparent; color: var(--text-2); font: inherit; font-size: 12.5px; cursor: pointer; }
+.mode-tabs button svg { width: 14px; height: 14px; }
+.mode-tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+.conv small { margin-left: auto; font-size: 10.5px; flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
+.code-view { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.code-top { flex: none; display: flex; align-items: center; gap: 10px; padding: 46px 16px 10px; border-bottom: 1px solid var(--border); }
+.code-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--violet); background: color-mix(in srgb, var(--violet) 14%, transparent); padding: 3px 9px; border-radius: 999px; }
+.code-badge svg { width: 13px; height: 13px; }
+.code-proj { font-size: 13.5px; }
+.code-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(320px, 400px); }
+.code-tree { overflow: auto; border-right: 1px solid var(--border); padding: 8px 6px; }
+.tree-row { display: flex; align-items: center; gap: 6px; width: 100%; height: 26px; border: 0; background: none; color: var(--text-2); font: inherit; font-size: 12.5px; text-align: left; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.tree-row:hover { background: var(--hover); color: var(--text); }
+.tree-row.active { background: var(--selection); color: var(--text); }
+.tree-row svg { width: 13px; height: 13px; flex: none; opacity: .7; }
+.tree-row span { overflow: hidden; text-overflow: ellipsis; }
+.tree-row .caret { width: 13px; flex: none; text-align: center; font-size: 10px; }
+.code-file { min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--code-bg); }
+.file-head { flex: none; display: flex; white-space: nowrap; overflow: hidden; gap: 10px; align-items: baseline; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; font-family: var(--mono); }
+.file-body { flex: 1; overflow: auto; display: flex; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; }
+.file-body pre { margin: 0; padding: 10px 0; }
+.file-body .gutter { flex: none; padding: 10px 10px 10px 14px; text-align: right; color: var(--text-3); user-select: none; border-right: 1px solid var(--border); }
+.file-body .src { flex: 1; padding-left: 14px; }
+.file-body .src code { background: none; padding: 0; }
+.code-chat { min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); }
+.code-msgs { flex: 1; overflow: auto; padding: 14px; display: grid; gap: 14px; align-content: start; }
+.c-msg.user { justify-self: end; max-width: 90%; }
+.c-msg.user .bubble { background: var(--raised); padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; font-size: 13px; }
+.c-msg.ai { font-size: 13px; min-width: 0; }
+.c-msg.ai pre { font-size: 12px; }
+.c-apply { display: grid; gap: 6px; margin-top: 8px; }
+.apply-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: 10px; font-size: 12.5px; font-family: var(--mono); }
+.apply-row svg { width: 14px; height: 14px; }
+.apply-row .btn { font-family: var(--font); }
+.code-input { flex: none; margin: 0; padding: 10px; border-top: 1px solid var(--border); display: grid; gap: 6px; }
+.code-input textarea { width: 100%; resize: none; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; padding: 8px 10px; outline: 0; }
+.code-input textarea:focus { border-color: var(--accent); }
+.code-input .faint { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.code-empty { grid-column: 1 / -1; align-self: center; justify-self: center; max-width: 460px; text-align: center; display: grid; gap: 12px; justify-items: center; padding: 30px; }
+.code-empty.small { grid-column: auto; padding: 20px; }
+.code-empty p { font-size: 13px; }
+.modal.wide { width: min(860px, 92vw); }
+.diff { max-height: 56vh; overflow: auto; font-family: var(--mono); font-size: 12px; line-height: 1.5; border: 1px solid var(--border); border-radius: 10px; background: var(--code-bg); padding: 6px 0; }
+.diff > div { white-space: pre; padding: 0 12px; }
+.diff .d-add { background: color-mix(in srgb, var(--success) 16%, transparent); }
+.diff .d-del { background: color-mix(in srgb, var(--danger) 16%, transparent); }
+.diff .d-ctx { color: var(--text-2); }
+.diff .d-gap { color: var(--text-3); text-align: center; }
+@media (max-width: 1100px) { .code-body { grid-template-columns: 180px minmax(0, 1fr) 320px; } }
+.file-head b { overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }

@@ -4,6 +4,7 @@
 import { invoke, listen, Channel, esc, el, errorText } from './api.js';
 import { renderMarkdown, wireMarkdown } from './markdown.js';
 import { icon } from './icons.js';
+import * as I18n from './i18n.js';
 
 const T = window.__TAURI__;
 const input = document.getElementById('q');
@@ -19,6 +20,7 @@ async function loadSettings() {
     const b = await invoke('bootstrap');
     settings = b.settings;
     document.documentElement.dataset.theme = settings.appearance || 'dark';
+    if (I18n.currentLanguage() !== I18n.resolve(settings.language)) await I18n.setLanguage(I18n.resolve(settings.language));
     const o = await invoke('models_overview');
     const m = o.available.find((x) => x.id === settings.model) || o.available[0];
     document.getElementById('model').textContent = m ? `${m.name} · sur ton ordinateur` : 'Aucun modèle installé — les outils restent disponibles';

@@ -2223,7 +2223,7 @@ dependencies = [
 
 [[package]]
 name = "nova-ai"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2231,6 +2231,7 @@ dependencies = [
  "dirs 5.0.1",
  "flate2",
  "futures-util",
+ "objc2",
  "open",
  "pdf-extract",
  "regex",

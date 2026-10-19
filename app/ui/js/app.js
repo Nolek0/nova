@@ -8,7 +8,9 @@ import * as Settings from './views/settings.js';
 import * as Weather from './views/weather.js';
 import * as Files from './views/files.js';
 import * as Misc from './views/misc.js';
+import * as Code from './views/code.js';
 import * as Updater from './updater.js';
+import * as I18n from './i18n.js';
 
 export const REPO_URL = 'https://github.com/Nolek0/nova';
 
@@ -48,12 +50,17 @@ async function init() {
   state.ramGb = boot.ram_gb;
   state.memories = boot.memories;
   state.notesDir = boot.notes_dir;
+  // Langue de l'interface : réglage, sinon langue du système.
+  const code = I18n.resolve(state.settings.language);
+  await I18n.setLanguage(code);
+  const langName = I18n.UI_LANGUAGES.find((l) => l.code === code)?.name || 'English';
+  if (state.settings.uiLanguageName !== langName) setSetting('uiLanguageName', langName);
   document.documentElement.dataset.platform = boot.platform;
   applyTheme();
   $('#toggle-sidebar').innerHTML = icon('panel');
   $('#toggle-sidebar').onclick = () => $('#app').classList.toggle('sidebar-collapsed');
   $('#new-chat').innerHTML = `${icon('pen')}<span>Nouvelle conversation</span><kbd>${isMac() ? '⌘N' : 'Ctrl+N'}</kbd>`;
-  $('#new-chat').onclick = () => newConversation();
+  $('#new-chat').onclick = () => (state.view === 'code' ? Code.newSession(ctxFor()) : newConversation());
   const search = $('#search input');
   $('#search').insertAdjacentHTML('afterbegin', icon('search'));
   search.oninput = async () => {
@@ -71,6 +78,8 @@ async function init() {
     if (state.convId && state.view === 'chat' && !state.streamingId) openConversation(state.convId);
   });
   listen('open-conversation', (e) => openConversation(e.payload));
+  // Île de l'encoche (macOS) : « Ouvrir » ou demande tapée dans l'île.
+  listen('island-ask', (e) => (state.settings.novaCode === '1' ? Code.askFromIsland(ctxFor(), e.payload) : null));
   // Menu de l'application (barre des menus).
   listen('menu', (e) => {
     const actions = {
@@ -84,7 +93,7 @@ async function init() {
       'tools': () => setView('tools'),
       'weather': () => setView('weather'),
       'files': () => setView('files'),
-      'nova-code': () => setView('code'),
+      'nova-code': () => openNovaCode(),
       'stop': () => stopGeneration(),
       'toggle-think': () => $('#composer [data-act=think]')?.click(),
       'toggle-web': () => $('#composer [data-act=web]')?.click(),
@@ -182,13 +191,35 @@ export function renderSidebar() {
     }
     return;
   }
+  if (state.settings.novaCode === '1') {
+    const code = state.view === 'code';
+    const tabs = el(`<div class="mode-tabs"><button class="${code ? '' : 'on'}">${icon('pen')}<span>Chat</span></button><button class="${code ? 'on' : ''}">${icon('code')}<span>Code</span></button></div>`);
+    const [bChat, bCode] = tabs.querySelectorAll('button');
+    bChat.onclick = () => { if (code) setView(state.convId ? 'chat' : 'home'); };
+    bCode.onclick = () => { if (!code) setView('code'); };
+    box.appendChild(tabs);
+    if (code) {
+      const sessions = state.conversations.filter((c) => c.kind === 'code');
+      box.appendChild(el('<div class="side-title">Sessions Nova Code</div>'));
+      for (const c of sessions) {
+        const proj = (c.project || '').split(/[\\/]/).pop();
+        const b = el(`<button class="conv ${Code.currentConversation() === c.id ? 'active' : ''}"><span>${esc(c.title)}</span><small class="faint" translate="no">${esc(proj)}</small></button>`);
+        b.onclick = () => Code.openSession(ctxFor(), c);
+        b.oncontextmenu = (e) => { e.preventDefault(); showMenu(b, [{ label: 'Renommer…', icon: icon('pencil'), action: () => renameConversation(c) }, 'sep', { label: 'Supprimer…', icon: icon('trash'), danger: true, action: () => deleteConversation(c) }]); };
+        box.appendChild(b);
+      }
+      if (!sessions.length) box.appendChild(el('<div class="side-empty">Tes sessions de code apparaîtront ici.</div>'));
+      return;
+    }
+  }
   for (const [id, label, ic] of NAV) {
     const b = el(`<button class="nav-item ${state.view === id ? 'active' : ''}">${icon(ic)}<span>${label}</span></button>`);
     b.onclick = () => setView(id);
     box.appendChild(b);
   }
-  const pinned = state.conversations.filter((c) => c.pinned);
-  const others = state.conversations.filter((c) => !c.pinned);
+  const chats = state.conversations.filter((c) => c.kind !== 'code');
+  const pinned = chats.filter((c) => c.pinned);
+  const others = chats.filter((c) => !c.pinned);
   if (pinned.length) {
     box.appendChild(el('<div class="side-title">Épinglées</div>'));
     pinned.forEach((c) => box.appendChild(convRow(c)));
@@ -208,7 +239,7 @@ export function renderSidebar() {
     box.appendChild(el(`<div class="side-title">${title}</div>`));
     list.forEach((c) => box.appendChild(convRow(c)));
   }
-  if (!state.conversations.length) box.appendChild(el('<div class="side-empty" style="margin-top:10px">Tes conversations apparaîtront ici. Elles restent enregistrées sur cet ordinateur.</div>'));
+  if (!chats.length) box.appendChild(el('<div class="side-empty" style="margin-top:10px">Tes conversations apparaîtront ici. Elles restent enregistrées sur cet ordinateur.</div>'));
 }
 
 function convRow(c) {
@@ -310,14 +341,25 @@ function renderDownloads() {
 
 // ------------------------------------------------------------------ Navigation
 
+function ctxFor() {
+  return { state, setView, checkForUpdates, currentVersion: Updater.currentVersion, refreshModels, setSetting, applyTheme, quickStart, pickFiles, openConversation, reloadConversations, renderSidebar, isMac, modal, addAttachmentFromPath, selectedModel };
+}
+
+function openNovaCode() {
+  if (state.settings.novaCode === '1') return setView('code');
+  setView('settings');
+  toast('Active Nova Code dans les Paramètres (section « Nova Code »).');
+}
+
 export function setView(view, opts = {}) {
   state.view = view;
   const v = $('#view');
   v.innerHTML = '';
   v.style.overflow = '';
   v.scrollTop = 0;
-  const ctx = { state, setView, checkForUpdates, currentVersion: Updater.currentVersion, refreshModels, setSetting, applyTheme, quickStart, pickFiles, openConversation, reloadConversations, renderSidebar, isMac, modal, addAttachmentFromPath };
+  const ctx = ctxFor();
   switch (view) {
+    case 'code': Code.render(v, ctx); break;
     case 'home': renderHome(v); break;
     case 'chat': renderChat(v); break;
     case 'tools': Tools.render(v, ctx, opts); break;

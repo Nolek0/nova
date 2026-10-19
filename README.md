@@ -89,6 +89,15 @@ Click **More info → Run anyway**. The installer is not code-signed with a paid
 - **Actions**: open apps, websites and files, create notes — always shown first and run only after you click **Allow**
 - **Wikipedia mode**: answers backed by cited sources
 
+### 👩‍💻 Nova Code (optional)
+- A separate **Code** workspace, enabled in Settings: open a project, browse files, ask Nova Code to explain or change code (`@path` to include a file)
+- Every proposed file is shown as a **diff** and written only when you click **Apply** — with an automatic backup of the previous version
+- macOS: a **notch island** — hover the MacBook notch to see Nova Code's status and send a request
+
+### 🌍 Languages
+- Interface in the **system language** by default: English, Français, Español, Português, Deutsch, Italiano, Nederlands, Kiswahili, Lingála, Kreyòl ayisyen
+- Answers in ~140 languages, including creoles, Lingala, Kikongo, Tshiluba and Wolof — or any language you type
+
 ### 🍎 macOS extras
 - **Menu-bar mini chat**: click the NOVA icon, ask, read the answer in a floating panel — no app switching
 - Native menu bar, dictation with on-device speech recognition
@@ -129,9 +138,10 @@ Every message first goes through the **router**: if a local tool can answer (mat
 
 ## Roadmap
 
-- [ ] Interface in many languages (system language by default)
+- [x] Interface in many languages (system language by default)
 - [ ] **Nova 1** integrated as the instant first layer for everyday commands
-- [ ] **Nova Code** — a dedicated coding workspace, with an optional notch “island” on macOS
+- [x] **Nova Code** — a dedicated coding workspace, with an optional notch “island” on macOS
+- [ ] More interface languages (contributions welcome: `app/ui/js/locales/`)
 - [ ] Dictation on Windows (local Whisper)
 - [ ] Agent mode: multi-step computer control, every action approved
 

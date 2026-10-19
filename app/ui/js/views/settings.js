@@ -2,6 +2,7 @@
 import { invoke, dialog, esc, el, toast, errorText, confirmDialog } from '../api.js';
 import { icon } from '../icons.js';
 import { folders, addFolder, removeFolder } from './files.js';
+import { UI_LANGUAGES, REPLY_LANGUAGES } from '../i18n.js';
 
 export function render(v, ctx) {
   const s = ctx.state.settings;
@@ -10,11 +11,56 @@ export function render(v, ctx) {
   const groups = page.querySelector('#groups');
   const group = (title, ic, html) => { const g = el(`<div class="card stack"><h2>${icon(ic)} ${title}</h2>${html}</div>`); groups.appendChild(g); return g; };
 
+  // Langue
+  const lg = group('Langue', 'globe', `<div class="row"><span style="width:180px">Langue de l'interface</span><select class="field" id="uilang"></select></div>
+    <div class="faint hidden" id="review">Traduction à faire relire par un locuteur natif.</div>
+    <div class="row"><span style="width:180px">Langue des réponses de l'IA</span><select class="field" id="replylang" style="max-width:300px"></select><input class="field hidden" id="replyother" placeholder="Écris le nom de la langue" style="width:200px"></div>`);
+  const uiSel = lg.querySelector('#uilang');
+  uiSel.appendChild(el(`<option value="system">Système</option>`));
+  UI_LANGUAGES.forEach((l) => uiSel.appendChild(el(`<option value="${l.code}" translate="no">${esc(l.name)}${l.review ? ' *' : ''}</option>`)));
+  uiSel.value = s.language || 'system';
+  const showReview = () => lg.querySelector('#review').classList.toggle('hidden', !UI_LANGUAGES.find((l) => l.code === uiSel.value)?.review);
+  showReview();
+  uiSel.onchange = async () => { await ctx.setSetting('language', uiSel.value); location.reload(); };
+  const rSel = lg.querySelector('#replylang'), rOther = lg.querySelector('#replyother');
+  rSel.appendChild(el(`<option value="auto">Automatique (langue de l'interface)</option>`));
+  REPLY_LANGUAGES.forEach((l) => rSel.appendChild(el(`<option value="${esc(l)}" translate="no">${esc(l)}</option>`)));
+  rSel.appendChild(el(`<option value="__other">Autre langue…</option>`));
+  const cur = s.replyLanguage || 'auto';
+  if (cur === 'auto' || REPLY_LANGUAGES.includes(cur)) rSel.value = cur;
+  else { rSel.value = '__other'; rOther.value = cur; rOther.classList.remove('hidden'); }
+  rSel.onchange = () => {
+    rOther.classList.toggle('hidden', rSel.value !== '__other');
+    if (rSel.value !== '__other') ctx.setSetting('replyLanguage', rSel.value);
+    else rOther.focus();
+  };
+  let tOther;
+  rOther.oninput = () => { clearTimeout(tOther); tOther = setTimeout(() => rOther.value.trim() && ctx.setSetting('replyLanguage', rOther.value.trim()), 400); };
+
   // Apparence
   const ap = group('Apparence', 'monitor', `<div class="row"><span style="width:150px">Thème</span><select class="field" id="theme"><option value="dark">Sombre</option><option value="light">Clair</option><option value="system">Système</option></select></div><div class="faint">Les préférences d’accessibilité du système (réduction des animations, contraste) sont respectées.</div>`);
   const theme = ap.querySelector('#theme');
   theme.value = s.appearance || 'dark';
   theme.onchange = async () => { await ctx.setSetting('appearance', theme.value); ctx.applyTheme(); };
+
+  // Nova Code
+  const nc = group('Nova Code', 'code', `<label class="row"><input type="checkbox" id="nc"> Activer Nova Code (onglet « Code » pour travailler sur tes projets)</label>
+    ${ctx.isMac() ? `<label class="row" id="isl-row"><input type="checkbox" id="isl"> Bulle de l'encoche : Nova Code apparaît quand la souris passe sur l'encoche du Mac</label>` : ''}
+    <div class="faint">Nova Code lit uniquement le dossier de projet que tu choisis. Il propose des modifications que tu relis (différences) avant de les appliquer ; l'ancienne version de chaque fichier est sauvegardée.</div>`);
+  const ncBox = nc.querySelector('#nc'), islBox = nc.querySelector('#isl');
+  ncBox.checked = s.novaCode === '1';
+  const syncIsl = () => { if (islBox) { islBox.disabled = !ncBox.checked; islBox.checked = ncBox.checked && s.notchIsland === '1'; } };
+  syncIsl();
+  ncBox.onchange = async () => {
+    await ctx.setSetting('novaCode', ncBox.checked ? '1' : '0');
+    if (ctx.isMac()) await invoke('set_notch_island', { enabled: ncBox.checked && s.notchIsland === '1' }).catch(() => {});
+    syncIsl();
+    ctx.renderSidebar();
+  };
+  if (islBox) islBox.onchange = async () => {
+    await ctx.setSetting('notchIsland', islBox.checked ? '1' : '0');
+    try { await invoke('set_notch_island', { enabled: islBox.checked }); } catch (e) { toast(errorText(e), 'error'); }
+  };
 
   // Personnalisation
   const pe = group('Personnalisation', 'pencil', `<div class="row"><span style="width:150px">Ton prénom</span><input class="field" id="name" placeholder="Facultatif" style="width:240px"></div>

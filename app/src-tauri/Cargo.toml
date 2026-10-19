@@ -1,6 +1,6 @@
 [package]
 name = "nova-ai"
-version = "0.3.0"
+version = "0.4.0"
 description = "NOVA AI — assistant personnel local pour macOS et Windows"
 edition = "2021"
 publish = false
@@ -37,6 +37,9 @@ base64 = "0.22"
 open = "5"
 dirs = "5"
 urlencoding = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
 
 [profile.release]
 opt-level = 3
