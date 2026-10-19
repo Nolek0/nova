@@ -2,18 +2,32 @@
 <html lang="fr" data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <title>Nova Code</title>
+  <title>NOVA</title>
   <link rel="stylesheet" href="css/app.css">
   <link rel="stylesheet" href="css/island.css">
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script src="vendor/highlight.min.js"></script>
   <script type="module" src="js/island.js"></script>
 </head>
 <body class="island-body">
   <div class="island" id="island">
-    <div class="isl-live" id="live"><span class="isl-dot"></span></div>
-    <div class="isl-panel" id="panel">
-      <div class="isl-head"><span class="mark"></span><b>Nova Code</b><span class="isl-proj" id="proj" translate="no"></span><span class="grow"></span><span class="isl-state" id="state">Prêt</span></div>
-      <div class="isl-preview" id="preview">Passe la souris sur l'encoche pour retrouver Nova Code.</div>
-      <form class="isl-ask" id="ask" autocomplete="off"><input id="q" placeholder="Demander à Nova Code…" aria-label="Demande pour Nova Code"><button class="btn small primary" type="submit">Envoyer</button><button class="btn small" type="button" id="open">Ouvrir</button></form>
+    <div class="isl-live"><span class="isl-dot"></span></div>
+    <div class="isl-panel">
+      <div class="isl-head">
+        <span class="mark" id="mark"></span>
+        <div class="isl-tabs" id="tabs"><button type="button" data-mode="chat" class="on">Nova Chat</button><button type="button" data-mode="code">Nova Code</button></div>
+        <span class="isl-proj" id="proj" translate="no"></span>
+        <span class="grow"></span>
+        <select class="isl-model" id="model" aria-label="Modèle" translate="no"></select>
+      </div>
+      <div class="isl-thread" id="thread"></div>
+      <form class="isl-ask" id="ask" autocomplete="off">
+        <input id="q" placeholder="Demande à NOVA…" aria-label="Question pour NOVA">
+        <button class="btn small primary" type="submit" id="send">Envoyer</button>
+        <button class="btn small" type="button" id="new" title="Nouvelle conversation">Nouvelle</button>
+        <button class="btn small" type="button" id="open" title="Ouvrir dans NOVA">Ouvrir</button>
+      </form>
     </div>
   </div>
 </body>

@@ -771,7 +771,7 @@ pub fn run() {
             {
                 let st = app.state::<AppState>();
                 let db = st.db.lock().unwrap();
-                let on = db.setting("novaCode").as_deref() == Some("1") && db.setting("notchIsland").as_deref() == Some("1");
+                let on = db.setting("notchIsland").as_deref() == Some("1");
                 drop(db);
                 if on {
                     if let Err(e) = island::enable(app.handle()) {
@@ -832,7 +832,11 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             island::island_open,
             #[cfg(target_os = "macos")]
-            island::island_hold
+            island::island_hold,
+            #[cfg(target_os = "macos")]
+            island::island_changed,
+            #[cfg(target_os = "macos")]
+            island::island_focus
         ])
         .build(tauri::generate_context!())
         .expect("erreur au démarrage de NOVA")

@@ -79,7 +79,15 @@ async function init() {
   });
   listen('open-conversation', (e) => openConversation(e.payload));
   // Île de l'encoche (macOS) : « Ouvrir » ou demande tapée dans l'île.
-  listen('island-ask', (e) => (state.settings.novaCode === '1' ? Code.askFromIsland(ctxFor(), e.payload) : null));
+  listen('island-open', async (e) => {
+    const { conversation_id: id, mode } = e.payload || {};
+    await reloadConversations();
+    if (mode === 'code' && state.settings.novaCode === '1') {
+      const conv = state.conversations.find((c) => c.id === id);
+      return conv ? Code.openSession(ctxFor(), conv) : setView('code');
+    }
+    return id ? openConversation(id) : newConversation();
+  });
   // Menu de l'application (barre des menus).
   listen('menu', (e) => {
     const actions = {

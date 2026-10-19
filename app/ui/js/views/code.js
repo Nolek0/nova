@@ -4,20 +4,6 @@ import { invoke, Channel, dialog, esc, el, toast, errorText } from '../api.js';
 import { icon } from '../icons.js';
 import { renderMarkdown, wireMarkdown } from '../markdown.js';
 
-let pendingAsk = null;
-
-/** Envoie l'état à l'île de l'encoche (macOS), si elle est ouverte. */
-function island(status) {
-  const name = S.project ? S.project.split(/[\\/]/).pop() : '';
-  window.__TAURI__.event.emitTo('island', 'island-status', { project: name, ...status }).catch(() => {});
-}
-
-/** Demande reçue depuis l'île : ouvre Nova Code et l'envoie. */
-export function askFromIsland(ctx, text) {
-  pendingAsk = text || null;
-  ctx.setView('code');
-}
-
 const S = { project: null, tree: [], open: null, openText: '', convId: null, messages: [], streaming: null, collapsed: new Set() };
 
 export function currentConversation() {
@@ -46,7 +32,6 @@ async function loadProject(ctx, path, reset = true) {
   if (reset) { S.convId = null; S.messages = []; }
   S.collapsed = new Set(S.tree.filter((p) => p.endsWith('/') && p.split('/').length > 2));
   await ctx.setSetting('codeProject', path);
-  island({ busy: false });
 }
 
 export async function render(v, ctx) {
@@ -73,14 +58,19 @@ export async function render(v, ctx) {
   root.querySelector('#c-new').onclick = () => newSession(ctx);
   root.querySelector('.code-proj').textContent = S.project ? S.project.split(/[\\/]/).pop() : '';
   if (!S.project) {
-    root.querySelector('.code-body').innerHTML = `<div class="code-empty"><div class="mark big"></div><h2>Nova Code</h2>
-      <p class="muted">Ouvre le dossier d'un projet : Nova Code lit ses fichiers, explique le code et propose des modifications. Rien n'est modifié sans ton accord, et une copie de chaque fichier est gardée avant d'écrire.</p>
-      <button class="btn primary" id="c-open2">${icon('folder')} Ouvrir un projet…</button></div>`;
+    // Sans dossier : on peut quand même discuter avec Nova Code (questions, extraits de code collés…).
+    root.querySelector('.code-body').classList.add('no-project');
+    root.querySelector('#c-tree').innerHTML = `<div class="code-empty small"><div class="mark big"></div><h2>Nova Code</h2>
+      <p class="muted">Pose tes questions de code directement. Pour que Nova Code lise et modifie tes fichiers, ouvre le dossier d'un projet : rien n'est modifié sans ton accord, et une copie de chaque fichier est gardée avant d'écrire.</p>
+      <button class="btn" id="c-open2">${icon('folder')} Ouvrir un projet…</button></div>`;
     root.querySelector('#c-open2').onclick = () => root.querySelector('#c-open').click();
-    return;
+  } else {
+    const close = el(`<button class="btn small" id="c-close" title="Travailler sans dossier">${icon('x')} Fermer le projet</button>`);
+    root.querySelector('#c-open').before(close);
+    close.onclick = async () => { S.project = null; S.tree = []; S.open = null; S.openText = ''; await ctx.setSetting('codeProject', ''); ctx.setView('code'); };
+    renderTree(root, ctx);
+    renderFile(root);
   }
-  renderTree(root, ctx);
-  renderFile(root);
   renderMessages(root);
   const ta = root.querySelector('textarea');
   const form = root.querySelector('#c-form');
@@ -88,7 +78,6 @@ export async function render(v, ctx) {
   form.onsubmit = (e) => { e.preventDefault(); send(root, ctx, ta); };
   updateHint(root);
   ta.focus();
-  if (pendingAsk) { ta.value = pendingAsk; pendingAsk = null; form.requestSubmit(); }
 }
 
 function updateHint(root) {
@@ -214,6 +203,7 @@ function fillAi(root, node, m, status) {
   const ap = node.querySelector('.c-apply');
   ap.innerHTML = '';
   if (S.streaming === m.id) return;
+  if (!S.project) return;
   for (const f of proposedFiles(m.content, S.open, S.tree)) {
     const b = el(`<div class="apply-row">${icon('file')}<b translate="no">${esc(f.path)}</b><span class="grow"></span><button class="btn small primary">Voir et appliquer…</button></div>`);
     b.querySelector('button').onclick = () => reviewChange(root, f);
@@ -252,7 +242,6 @@ async function send(root, ctx, ta) {
         box.appendChild(messageNode(root, ev.user));
         box.appendChild(messageNode(root, reply));
         updateHint(root);
-        island({ busy: true, preview: text.slice(0, 160) });
         ctx.reloadConversations();
         break;
       case 'status': status = ev.text; schedule(); break;
@@ -268,7 +257,6 @@ async function send(root, ctx, ta) {
         if (node) fillAi(root, node, ev.message);
         box.scrollTop = box.scrollHeight;
         updateHint(root);
-        island({ busy: false, preview: (ev.message.content || '').replace(/```[\s\S]*?```/g, '[code]').replace(/[#*_`>]/g, '').trim().slice(0, 200) });
         ctx.reloadConversations();
         break;
       }
@@ -277,13 +265,12 @@ async function send(root, ctx, ta) {
   try {
     await invoke('send_message', {
       conversationId: S.convId, text, attachments: [],
-      options: { model_id: ctx.selectedModel()?.id ?? null, web: false, think: ctx.state.settings.thinking === '1', mode: 'code', project: S.project, open_file: S.open },
+      options: { model_id: ctx.selectedModel()?.id ?? null, web: false, think: ctx.state.settings.thinking === '1', mode: 'code', project: S.project || null, open_file: S.project ? S.open : null },
       onEvent: ch,
     });
   } catch (e) {
     S.streaming = null;
     updateHint(root);
-    island({ busy: false });
     toast(errorText(e), 'error');
   }
 }

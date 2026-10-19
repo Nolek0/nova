@@ -1,4 +1,4 @@
-/* Île de l'encoche (macOS) : noire comme l'encoche, pour s'y fondre. */
+/* Île (macOS) : noire comme l'encoche, pour s'y fondre. Une par écran. */
 html, body.island-body { background: transparent !important; overflow: hidden; height: 100%; margin: 0; }
 .island {
   --nw: 190px; --nh: 32px;
@@ -8,24 +8,33 @@ html, body.island-body { background: transparent !important; overflow: hidden; h
   border-radius: 0 0 12px 12px;
   overflow: hidden;
   transition: width .32s cubic-bezier(.2,.9,.25,1.1), height .32s cubic-bezier(.2,.9,.25,1.1), border-radius .32s;
-  box-shadow: none;
 }
+/* Écran sans encoche : petite pastille discrète. */
+.island.no-notch:not(.open) { border-radius: 0 0 10px 10px; height: calc(var(--nh) - 6px); width: 150px; }
 .island.busy:not(.open) { width: calc(var(--nw) + 56px); }
-.island.open { width: 440px; height: 172px; border-radius: 0 0 26px 26px; box-shadow: 0 12px 30px rgba(0,0,0,.45); }
-.island.no-notch:not(.open):not(.busy) { opacity: 0; }
+.island.open { width: 540px; height: 156px; border-radius: 0 0 26px 26px; box-shadow: 0 14px 34px rgba(0,0,0,.5); }
+.island.open.has-thread { height: 364px; }
 .isl-live { position: absolute; right: 12px; top: 0; height: var(--nh); display: flex; align-items: center; opacity: 0; transition: opacity .2s; }
 .island.busy:not(.open) .isl-live { opacity: 1; }
 .isl-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: isl-pulse 1.1s ease-in-out infinite; }
 @keyframes isl-pulse { 50% { transform: scale(.6); opacity: .5; } }
-.isl-panel { position: absolute; inset: 0; padding: calc(var(--nh) + 8px) 18px 14px; display: grid; gap: 9px; align-content: start; opacity: 0; transition: opacity .18s; pointer-events: none; }
+.isl-panel { position: absolute; inset: 0; padding: calc(var(--nh) + 8px) 18px 14px; display: flex; flex-direction: column; gap: 10px; opacity: 0; transition: opacity .18s; pointer-events: none; }
 .island.open .isl-panel { opacity: 1; transition-delay: .12s; pointer-events: auto; }
-.isl-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.isl-head .mark { width: 18px; height: 18px; }
+.isl-head { display: flex; align-items: center; gap: 8px; font-size: 13px; flex: none; }
+.isl-head .mark { width: 18px; height: 18px; flex: none; }
 .isl-head .mark::before { inset: 2px; }
-.isl-proj { color: #9ba1ae; font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.isl-state { font-size: 11.5px; color: #9ba1ae; }
-.island.busy .isl-state { color: var(--accent); }
-.isl-preview { font-size: 12.5px; color: #c9ccd3; line-height: 1.4; height: 36px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.isl-ask { display: flex; gap: 6px; margin: 0; }
-.isl-ask input { flex: 1; min-width: 0; background: #16181d; border: 1px solid rgba(255,255,255,.12); border-radius: 9px; color: #f2f3f5; padding: 6px 10px; font-size: 13px; outline: 0; }
+.isl-tabs { display: flex; gap: 2px; padding: 2px; background: #16181d; border-radius: 8px; }
+.isl-tabs button { border: 0; background: transparent; color: #9ba1ae; font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+.isl-tabs button.on { background: #2a2d36; color: #f2f3f5; }
+.isl-tabs.single button[data-mode="code"] { display: none; }
+.isl-proj { color: #9ba1ae; font-size: 11.5px; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.isl-model { max-width: 190px; background: #16181d; color: #f2f3f5; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; font: inherit; font-size: 12px; padding: 4px 6px; outline: 0; }
+.isl-thread { flex: 1; min-height: 0; overflow-y: auto; display: none; gap: 10px; flex-direction: column; font-size: 13px; line-height: 1.45; color: #dcdfe5; padding-right: 4px; }
+.island.has-thread .isl-thread { display: flex; }
+.isl-thread .q-user { align-self: flex-end; background: #1f222a; padding: 6px 11px; border-radius: 11px; max-width: 85%; white-space: pre-wrap; }
+.isl-thread .q-ai .md p { margin-bottom: 6px; }
+.isl-thread .q-ai pre { font-size: 11.5px; }
+.isl-thread .faint { color: #8a909c; font-size: 12px; }
+.isl-ask { display: flex; gap: 6px; margin: 0; flex: none; }
+.isl-ask input { flex: 1; min-width: 0; background: #16181d; border: 1px solid rgba(255,255,255,.12); border-radius: 9px; color: #f2f3f5; padding: 7px 10px; font-size: 13px; outline: 0; }
 .isl-ask input:focus { border-color: var(--accent); }

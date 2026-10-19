@@ -45,18 +45,19 @@ export function render(v, ctx) {
 
   // Nova Code
   const nc = group('Nova Code', 'code', `<label class="row"><input type="checkbox" id="nc"> Activer Nova Code (onglet « Code » pour travailler sur tes projets)</label>
-    ${ctx.isMac() ? `<label class="row" id="isl-row"><input type="checkbox" id="isl"> Bulle de l'encoche : Nova Code apparaît quand la souris passe sur l'encoche du Mac</label>` : ''}
     <div class="faint">Nova Code lit uniquement le dossier de projet que tu choisis. Il propose des modifications que tu relis (différences) avant de les appliquer ; l'ancienne version de chaque fichier est sauvegardée.</div>`);
-  const ncBox = nc.querySelector('#nc'), islBox = nc.querySelector('#isl');
+  const ncBox = nc.querySelector('#nc');
   ncBox.checked = s.novaCode === '1';
-  const syncIsl = () => { if (islBox) { islBox.disabled = !ncBox.checked; islBox.checked = ncBox.checked && s.notchIsland === '1'; } };
-  syncIsl();
   ncBox.onchange = async () => {
     await ctx.setSetting('novaCode', ncBox.checked ? '1' : '0');
-    if (ctx.isMac()) await invoke('set_notch_island', { enabled: ncBox.checked && s.notchIsland === '1' }).catch(() => {});
-    syncIsl();
     ctx.renderSidebar();
   };
+
+  // Bulle de l'encoche (Mac)
+  const isl = ctx.isMac() ? group("Bulle de l'encoche", 'sparkles', `<label class="row"><input type="checkbox" id="isl"> Afficher NOVA dans l'encoche du Mac et en haut de chaque écran</label>
+    <div class="faint">Passe la souris sur l'encoche (ou sur la petite pastille en haut des écrans externes) : choisis Nova Chat ou Nova Code et le modèle, puis pose ta question sans quitter ce que tu fais.</div>`) : null;
+  const islBox = isl?.querySelector('#isl');
+  if (islBox) islBox.checked = s.notchIsland === '1';
   if (islBox) islBox.onchange = async () => {
     await ctx.setSetting('notchIsland', islBox.checked ? '1' : '0');
     try { await invoke('set_notch_island', { enabled: islBox.checked }); } catch (e) { toast(errorText(e), 'error'); }
