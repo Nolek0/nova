@@ -114,6 +114,18 @@ fn par_chunks<F: Fn(usize, &mut [f32]) + Sync>(data: &mut [f32], len: usize, f: 
 
 // ----------------------------------------------------------------------------- Briques (CNHW)
 
+/// Tampon de grande taille sans remplissage initial : réservé aux tampons entièrement réécrits
+/// avant toute lecture (im2col, produits matriciels avec beta = 0, sorties calculées partout).
+fn scratch(n: usize) -> Vec<f32> {
+    let mut v = Vec::with_capacity(n);
+    // SAFETY : f32 n'a pas de valeur invalide ; chaque appelant écrit tout le tampon avant de le lire.
+    #[allow(clippy::uninit_vec)]
+    unsafe {
+        v.set_len(n)
+    };
+    v
+}
+
 /// im2col : x [c][b][h][w] → col [(c·9 + k)][b·h·w], noyau 3×3, bord à zéro.
 fn im2col(x: &[f32], c: usize, b: usize, h: usize, w: usize, col: &mut [f32]) {
     let n = b * h * w;
@@ -177,9 +189,10 @@ fn col2im(col: &[f32], c: usize, b: usize, h: usize, w: usize, dx: &mut [f32]) {
 /// Max-pool 2×2 : renvoie la sortie et l'indice (dans l'entrée) du maximum de chaque fenêtre.
 fn maxpool(x: &[f32], c: usize, b: usize, h: usize, w: usize) -> (Vec<f32>, Vec<u32>) {
     let (oh, ow) = (h / 2, w / 2);
-    let mut out = vec![0.0; c * b * oh * ow];
-    let mut arg = vec![0u32; c * b * oh * ow];
-    for plane in 0..c * b {
+    let plane_out = oh * ow;
+    // Valeur et indice rangés ensemble dans un seul tampon pour un parcours parallèle par plan.
+    let mut both = vec![0.0f32; c * b * plane_out * 2];
+    par_chunks(&mut both, plane_out * 2, |plane, dst| {
         let src = &x[plane * h * w..(plane + 1) * h * w];
         for y in 0..oh {
             for xx in 0..ow {
@@ -192,12 +205,14 @@ fn maxpool(x: &[f32], c: usize, b: usize, h: usize, w: usize) -> (Vec<f32>, Vec<
                         bi = i;
                     }
                 }
-                let o = plane * oh * ow + y * ow + xx;
-                out[o] = best;
-                arg[o] = (plane * h * w + bi) as u32;
+                let o = y * ow + xx;
+                dst[2 * o] = best;
+                dst[2 * o + 1] = f32::from_bits((plane * h * w + bi) as u32);
             }
         }
-    }
+    });
+    let out = both.iter().step_by(2).copied().collect();
+    let arg = both.iter().skip(1).step_by(2).map(|v| v.to_bits()).collect();
     (out, arg)
 }
 
@@ -303,35 +318,44 @@ impl Trainer {
         for li in 0..6 {
             let n = b * h * w;
             let (cin, cout) = (self.convs[li].cin, self.convs[li].cout);
-            let mut col = vec![0.0; cin * 9 * n];
+            let mut col = scratch(cin * 9 * n);
             im2col(&cur, cin, b, h, w, &mut col);
-            let mut z = vec![0.0; cout * n];
+            let mut z = scratch(cout * n);
             gemm(false, false, cout, n, cin * 9, 1.0, &self.convs[li].w, &col, 0.0, &mut z);
             let layer = &mut self.convs[li];
-            let mut invstd = vec![0.0; cout];
-            let mut xhat = z;
-            for c in 0..cout {
-                let row = &mut xhat[c * n..(c + 1) * n];
-                let (mean, var) = if train {
+            // Statistiques par canal (en parallèle), puis normalisation et ReLU.
+            let mut stats = vec![0.0f32; 2 * cout];
+            if train {
+                par_chunks(&mut stats, 2, |c, st| {
+                    let row = &z[c * n..(c + 1) * n];
                     let m = row.iter().sum::<f32>() / n as f32;
-                    let v = row.iter().map(|v| (v - m) * (v - m)).sum::<f32>() / n as f32;
-                    layer.run_mean[c] = 0.9 * layer.run_mean[c] + 0.1 * m;
-                    layer.run_var[c] = 0.9 * layer.run_var[c] + 0.1 * v * n as f32 / (n as f32 - 1.0).max(1.0);
-                    (m, v)
-                } else {
-                    (layer.run_mean[c], layer.run_var[c])
-                };
-                let is = 1.0 / (var + EPS).sqrt();
-                invstd[c] = is;
-                row.iter_mut().for_each(|v| *v = (*v - mean) * is);
-            }
-            let mut out = vec![0.0; cout * n];
-            for c in 0..cout {
-                let (g, be) = (layer.gamma[c], layer.beta[c]);
-                for (o, xh) in out[c * n..(c + 1) * n].iter_mut().zip(&xhat[c * n..(c + 1) * n]) {
-                    *o = (g * xh + be).max(0.0);
+                    st[0] = m;
+                    st[1] = row.iter().map(|v| (v - m) * (v - m)).sum::<f32>() / n as f32;
+                });
+                for c in 0..cout {
+                    layer.run_mean[c] = 0.9 * layer.run_mean[c] + 0.1 * stats[2 * c];
+                    layer.run_var[c] = 0.9 * layer.run_var[c] + 0.1 * stats[2 * c + 1] * n as f32 / (n as f32 - 1.0).max(1.0);
+                }
+            } else {
+                for c in 0..cout {
+                    stats[2 * c] = layer.run_mean[c];
+                    stats[2 * c + 1] = layer.run_var[c];
                 }
             }
+            let invstd: Vec<f32> = (0..cout).map(|c| 1.0 / (stats[2 * c + 1] + EPS).sqrt()).collect();
+            let mut xhat = z;
+            par_chunks(&mut xhat, n, |c, row| {
+                let (m, is) = (stats[2 * c], invstd[c]);
+                row.iter_mut().for_each(|v| *v = (*v - m) * is);
+            });
+            let mut out = scratch(cout * n);
+            let (gamma, beta) = (&layer.gamma, &layer.beta);
+            par_chunks(&mut out, n, |c, o| {
+                let (g, be) = (gamma[c], beta[c]);
+                for (o, xh) in o.iter_mut().zip(&xhat[c * n..(c + 1) * n]) {
+                    *o = (g * xh + be).max(0.0);
+                }
+            });
             let pool = if li % 2 == 1 {
                 let (p, arg) = maxpool(&out, cout, b, h, w);
                 cur = p;
@@ -426,38 +450,53 @@ impl Trainer {
             let n = b * lh * lw;
             // Dé-pool : le gradient revient au maximum de chaque fenêtre.
             let mut dout = if let Some(arg) = &cache.pool {
+                // Chaque canal ne reçoit que ses propres maxima : dé-pool en parallèle par canal.
                 let mut d = vec![0.0; cout * n];
-                for (i, &a) in arg.iter().enumerate() {
-                    d[a as usize] += dcur[i];
-                }
+                let q = n / 4;
+                par_chunks(&mut d, n, |c, dc| {
+                    for i in c * q..(c + 1) * q {
+                        dc[arg[i] as usize - c * n] += dcur[i];
+                    }
+                });
                 d
             } else {
                 std::mem::take(&mut dcur)
             };
-            // ReLU puis normalisation.
-            for (d, o) in dout.iter_mut().zip(&cache.out) {
-                if *o <= 0.0 {
-                    *d = 0.0;
+            // ReLU puis normalisation (en parallèle par canal).
+            let outv = &cache.out;
+            par_chunks(&mut dout, n, |c, dy| {
+                for (d, o) in dy.iter_mut().zip(&outv[c * n..(c + 1) * n]) {
+                    if *o <= 0.0 {
+                        *d = 0.0;
+                    }
                 }
-            }
+            });
+            let mut sums = vec![0.0f32; 2 * cout];
+            let xhv = &cache.xhat;
+            par_chunks(&mut sums, 2, |c, st| {
+                let dy = &dout[c * n..(c + 1) * n];
+                let xh = &xhv[c * n..(c + 1) * n];
+                st[0] = dy.iter().sum();
+                st[1] = dy.iter().zip(xh).map(|(a, b)| a * b).sum();
+            });
             for c in 0..cout {
-                let dy = &mut dout[c * n..(c + 1) * n];
-                let xh = &cache.xhat[c * n..(c + 1) * n];
-                let dbeta: f32 = dy.iter().sum();
-                let dgamma: f32 = dy.iter().zip(xh).map(|(a, b)| a * b).sum();
-                layer.dbeta[c] = dbeta;
-                layer.dgamma[c] = dgamma;
-                let k = layer.gamma[c] * cache.invstd[c] / n as f32;
-                for (d, x) in dy.iter_mut().zip(xh) {
+                layer.dbeta[c] = sums[2 * c];
+                layer.dgamma[c] = sums[2 * c + 1];
+            }
+            let (gamma, invstd) = (&layer.gamma, &cache.invstd);
+            par_chunks(&mut dout, n, |c, dy| {
+                let (dbeta, dgamma) = (sums[2 * c], sums[2 * c + 1]);
+                let k = gamma[c] * invstd[c] / n as f32;
+                for (d, x) in dy.iter_mut().zip(&xhv[c * n..(c + 1) * n]) {
                     *d = k * (n as f32 * *d - dbeta - x * dgamma);
                 }
-            }
+            });
             // Poids : dW = dZ · colᵀ ; entrée : dcol = Wᵀ · dZ.
             gemm(false, true, cout, cin * 9, n, 1.0, &dout, &cache.col, 0.0, &mut layer.dw);
             if li > 0 {
-                let mut dcol = vec![0.0; cin * 9 * n];
+                let mut dcol = scratch(cin * 9 * n);
                 gemm(true, false, cin * 9, n, cout, 1.0, &layer.w, &dout, 0.0, &mut dcol);
-                let mut dx = vec![0.0; cin * n];
+                let mut dx = scratch(cin * n);
                 col2im(&dcol, cin, b, lh, lw, &mut dx);
                 dcur = dx;
                 h = lh;
@@ -729,6 +768,31 @@ mod tests {
         let p_inf = inf.forward(&one);
         for k in 0..106 {
             assert!((p_train[k] - p_inf[k]).abs() < 1e-3, "{k}: {} vs {}", p_train[k], p_inf[k]);
+        }
+    }
+}
+
+#[cfg(test)]
+mod bench {
+    use super::*;
+    /// cargo test --release vision::bench -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn speed() {
+        for widths in [[32, 64, 128], [48, 96, 192], [64, 128, 256]] {
+            let mut net = Trainer::new(widths, 106, 1);
+            let b = 128;
+            let mut rng = Rng::new(2);
+            let x: Vec<f32> = (0..3 * b * 1024).map(|_| gauss(&mut rng)).collect();
+            let labels: Vec<usize> = (0..b).map(|i| i % 106).collect();
+            let cw = vec![1.0; 106];
+            net.step(&x, &labels, &cw, b, 0.01, 0.0, 0.0);
+            let t = std::time::Instant::now();
+            for _ in 0..4 {
+                net.step(&x, &labels, &cw, b, 0.01, 0.0, 0.0);
+            }
+            let per = t.elapsed().as_secs_f32() / 4.0;
+            println!("{widths:?} : {} paramètres · {per:.3} s/lot · {:.1} min/époque (100 000 images)", net.params(), per * 781.0 / 60.0);
         }
     }
 }

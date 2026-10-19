@@ -337,7 +337,7 @@ GENERATORS = {
 }
 
 # Phrases « autre » : questions générales, demandes de rédaction… et pièges qui ressemblent à des commandes.
-TRAPS = ["je suis stressé pour mon exam demain", "qui est Cristiano Ronaldo", "qui était Napoléon", "qui a gagné la coupe du monde 2018",
+TRAPS = ["comment dessiner un visage", "explique-moi comment dessiner une main", "apprends-moi à dessiner", "c'est quoi le dessin technique", "comment on dessine en perspective", "quel logiciel pour dessiner", "j'aime dessiner", "résume la révolution française", "résume l'histoire de la Belgique", "fais-moi un résumé de la Seconde Guerre mondiale", "résume le film Titanic", "résume le livre Le Petit Prince", "je suis stressé pour mon exam demain", "qui est Cristiano Ronaldo", "qui était Napoléon", "qui a gagné la coupe du monde 2018",
          "le temps qu'il faut pour cuire un oeuf", "combien de temps pour apprendre le piano", "j'ai pas le temps aujourd'hui",
          "ma note de français est mauvaise", "comment noter un exercice", "comment organiser mes fichiers", "c'est quoi un dossier zip",
          "à quelle heure ouvre la poste en général", "pourquoi les journées sont plus courtes en hiver", "comment on fait une bonne prod",
@@ -400,7 +400,7 @@ RESUME_FORMS = ["résume ce document", "résume ce pdf", "résume ce texte", "fa
                 "fais-moi un résumé", "résumé de ce pdf", "tu peux résumer ce fichier", "donne-moi les points clés", "résume le fichier",
                 "les idées principales de ce document", "fais une synthèse de ce texte", "résume en quelques lignes", "c'est quoi l'essentiel de ce pdf",
                 "résume cet article", "tl;dr", "résume", "fais court", "résume ce cours", "extrais les phrases importantes", "résume le pdf joint",
-                "donne-moi un résumé de ce texte :", "résume ceci :", "résume ce texte : la photosynthèse est un processus"]
+                "donne-moi un résumé de ce texte :", "résume ceci :", "résume ce texte : la photosynthèse est un processus", "résume ce que je t'ai envoyé", "résume ce que je viens de coller", "résume la pièce jointe", "résume le document ci-joint", "fais le résumé de ce fichier", "les points importants de ce texte"]
 RESUME_FORMS_TEST = ["condense ce document", "sors-moi l'essentiel de ce texte", "en bref, ça dit quoi ce pdf"]
 
 GENERATORS["dessin"] = gen_dessin

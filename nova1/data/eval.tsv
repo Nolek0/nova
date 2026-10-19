@@ -72,3 +72,17 @@ autre	écris un poème sur l'automne
 autre	combien d'habitants en belgique
 autre	comment ouvrir un fichier zip
 autre	le temps qu'il faut pour cuire un oeuf
+dessin	dessine moi un canard stp	sujet=un canard
+dessin	tu peux me dessiner un chat qui dort	sujet=un chat qui dort
+dessin	fais un dessin d'une maison au bord de la mer	sujet=une maison au bord de la mer
+dessin	je veux une image d'un robot	sujet=un robot
+dessin	dessine trois étoiles	sujet=trois étoiles
+dessin	draw a duck	sujet=a duck
+dessin	génère une image d'une forêt la nuit	sujet=une forêt la nuit
+resume	résume moi ce pdf stp	
+resume	tu peux me faire un résumé de ce document	
+resume	c'est quoi les points importants de ce texte	
+resume	résume ce que je t'ai envoyé	
+resume	fais une synthèse rapide	
+autre	explique moi comment dessiner un visage	
+autre	résume la révolution française en 5 lignes	

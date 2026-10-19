@@ -125,12 +125,25 @@ fn instant(p: &nova1::Prediction, settings: &HashMap<String, String>) -> Option<
 fn is_draw_request(text: &str, p: Option<&nova1::Prediction>) -> bool {
     let t = text.to_lowercase();
     let re = regex::Regex::new(r"(?i)\b(dessine|dessiner|dessin|draw|illustre|gribouille|image d['eu]|cr[ée]e une image|g[ée]n[èe]re une image|fais une image)\b").unwrap();
-    re.is_match(&t) || p.map(|p| p.intent == "dessin" && p.confidence >= 0.6).unwrap_or(false)
+    // Une question sur le dessin (« comment dessiner un visage ? ») n'est pas une demande de dessin.
+    let question = regex::Regex::new(r"(?i)^\s*(comment|explique|apprends|pourquoi|quel|quelle|quels|c'est quoi|j'aime|how|what|why)\b|comment (on )?dessin|à dessiner|a dessiner|dessin technique").unwrap();
+    if question.is_match(&t) {
+        return false;
+    }
+    // Verbe explicite (« dessine », « crée une image ») ou intention reconnue par Nova 1 Texte.
+    re.is_match(&t) || p.map(|p| p.intent == "dessin" && p.confidence >= 0.5).unwrap_or(false)
 }
 
 /// Image dessinée, intégrée à la réponse (Markdown, image SVG en ligne).
 pub fn drawing_reply(text: &str) -> String {
-    match draw::parse(text) {
+    let parsed = draw::parse(text);
+    if parsed.is_none() && draw::unknown_words(text).is_empty() {
+        return format!(
+            "Avec plaisir ! Que veux-tu que je dessine ? Je sais dessiner : {}.\n\nTu peux combiner des sujets, des couleurs, des nombres et un décor : *« un canard sur un lac au coucher du soleil »*, *« une maison avec un arbre la nuit »*, *« un ballon de foot dans un parc »*.",
+            draw::known_subjects()
+        );
+    }
+    match parsed {
         None => format!(
             "Je ne sais pas encore dessiner ça. Nova 1 Dessin fait des dessins simples à partir de : {}.\n\nTu peux combiner des sujets, des couleurs, des nombres et un décor : *« deux canards sur un lac au coucher du soleil »*, *« une maison avec un arbre la nuit »*, *« une voiture rouge sous la pluie »*.",
             draw::known_subjects()
@@ -200,4 +213,34 @@ pub fn respond(text: &str, attachments: &[Attachment], settings: &HashMap<String
         _ => "Je suis **Nova 1**, le modèle ultra rapide de NOVA : je réponds instantanément aux demandes simples (heure, date, dé, blagues…), je **dessine** (« dessine un chat sous la pluie »), je **résume** les PDF et textes joints et je **reconnais** ce qu'il y a sur une image ou dans une vidéo.\n\nPour une conversation libre, une explication ou du code, choisis un modèle de conversation (par exemple Gemma 4) dans le sélecteur de modèle.".to_string(),
     };
     Reply { content, tool: "Nova 1" }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_layer_routing() {
+        let st = HashMap::new();
+        let draw = first_layer("dessine-moi un canard sur un lac", &[], &st, true).unwrap();
+        assert_eq!(draw.tool, "Nova 1 Dessin");
+        assert!(draw.content.contains("data:image/svg+xml;base64,"));
+        assert!(first_layer("explique-moi comment dessiner un visage", &[], &st, true).is_none());
+        assert!(first_layer("Qui est le président de la France ?", &[], &st, true).is_none());
+        assert!(first_layer("explique la photosynthèse", &[], &st, true).is_none());
+        let hi = first_layer("salut", &[], &st, true).unwrap();
+        assert_eq!(hi.tool, "Nova 1");
+        assert!(first_layer("salut", &[], &st, false).is_none());
+        assert!(first_layer("quelle heure est-il", &[], &st, true).unwrap().content.contains("Il est"));
+        assert!(first_layer("lance un dé à 20 faces", &[], &st, true).unwrap().content.contains("20 faces"));
+    }
+
+    #[test]
+    fn nova_mode_summarizes_pasted_text() {
+        let st = HashMap::new();
+        let text = format!("résume ce texte : {}", "La photosynthèse permet aux plantes de produire du glucose à partir de la lumière. Elle a lieu dans les chloroplastes des feuilles. Elle libère de l'oxygène dans l'atmosphère. Les animaux respirent cet oxygène pour vivre. Sans elle, la vie sur Terre serait très différente. ".repeat(2));
+        let r = respond(&text, &[], &st);
+        assert_eq!(r.tool, "Nova 1 Résumé");
+        assert!(r.content.contains("Résumé"));
+    }
 }

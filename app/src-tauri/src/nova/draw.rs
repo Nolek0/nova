@@ -13,6 +13,7 @@ const HORIZON: f32 = 300.0;
 pub enum Kind {
     Duck, Cat, Dog, House, Tree, Pine, Sun, Moon, Star, Cloud, Car, Flower, Mountain, Fish, Bird, Heart, Boat, Apple,
     Butterfly, Mushroom, Rocket, Robot, Snowman, Rainbow, Rabbit, Turtle, Castle, Owl, Cactus,
+    Ball, Plane, Bike, Cake, Gift, IceCream, Pizza, Umbrella,
 }
 
 /// Mots reconnus → objet. Les formes au pluriel et sans accents sont acceptées.
@@ -29,6 +30,9 @@ const LEXICON: &[(&str, Kind)] = &[
     ("bonhomme", Kind::Snowman), ("snowman", Kind::Snowman), ("arc-en-ciel", Kind::Rainbow), ("rainbow", Kind::Rainbow), ("lapin", Kind::Rabbit),
     ("rabbit", Kind::Rabbit), ("tortue", Kind::Turtle), ("turtle", Kind::Turtle), ("chateau", Kind::Castle), ("castle", Kind::Castle),
     ("hibou", Kind::Owl), ("chouette", Kind::Owl), ("owl", Kind::Owl), ("cactus", Kind::Cactus),
+    ("ballon", Kind::Ball), ("foot", Kind::Ball), ("football", Kind::Ball), ("ball", Kind::Ball), ("avion", Kind::Plane), ("plane", Kind::Plane),
+    ("velo", Kind::Bike), ("bicyclette", Kind::Bike), ("bike", Kind::Bike), ("gateau", Kind::Cake), ("cake", Kind::Cake), ("cadeau", Kind::Gift),
+    ("gift", Kind::Gift), ("glace", Kind::IceCream), ("ice", Kind::IceCream), ("pizza", Kind::Pizza), ("parapluie", Kind::Umbrella), ("umbrella", Kind::Umbrella),
 ];
 
 const COLORS: &[(&str, &str)] = &[
@@ -42,7 +46,7 @@ const NUMBERS: &[(&str, usize)] = &[("un", 1), ("une", 1), ("deux", 2), ("trois"
 
 /// Mots qui ne désignent pas un objet à dessiner (pour signaler honnêtement ce qui n'est pas reconnu).
 const FILLER: &[&str] = &[
-    "dessine", "dessiner", "dessin", "moi", "fais", "fait", "faire", "un", "une", "des", "de", "du", "la", "le", "les", "l", "d", "avec", "sur",
+    "dessine", "dessiner", "dessin", "cree", "creer", "genere", "generer", "imagine", "peux-tu", "dessine-moi", "fais-moi", "moi", "fais", "fait", "faire", "un", "une", "des", "de", "du", "la", "le", "les", "l", "d", "avec", "sur",
     "sous", "dans", "et", "au", "aux", "en", "image", "illustre", "illustration", "genere", "cree", "montre", "stp", "plait", "s", "il", "te",
     "pour", "petit", "petite", "grand", "grande", "gros", "joli", "jolie", "mignon", "mignonne", "beau", "belle", "tu", "peux", "peut", "nova",
     "draw", "a", "an", "the", "of", "on", "in", "with", "please", "j", "aimerais", "voudrais", "veux", "me", "ce", "cette", "qui", "est", "dessus",
@@ -111,7 +115,7 @@ fn color_of(w: &str) -> Option<&'static str> {
 
 /// Comprend la demande. `None` si rien de dessinable n'est reconnu.
 pub fn parse(text: &str) -> Option<Scene> {
-    let t = fold(text).replace("arc en ciel", "arc-en-ciel").replace("bonhomme de neige", "bonhomme").replace("coucher de soleil", "coucher").replace("coucher du soleil", "coucher").replace("lever de soleil", "coucher").replace("lever du soleil", "coucher").replace("couche de soleil", "coucher").replace("œ", "oe");
+    let t = fold(text).replace("ballon de football", "ballon").replace("ballon de foot", "ballon").replace("arc en ciel", "arc-en-ciel").replace("bonhomme de neige", "bonhomme").replace("coucher de soleil", "coucher").replace("coucher du soleil", "coucher").replace("lever de soleil", "coucher").replace("lever du soleil", "coucher").replace("couche de soleil", "coucher").replace("œ", "oe");
     let words: Vec<String> = t
         .split(|c: char| !(c.is_alphanumeric() || c == '-'))
         .flat_map(|w| w.split('\''))
@@ -200,7 +204,7 @@ pub fn parse(text: &str) -> Option<Scene> {
 }
 
 fn is_sky(k: Kind) -> bool {
-    matches!(k, Kind::Sun | Kind::Moon | Kind::Star | Kind::Cloud | Kind::Bird | Kind::Rainbow | Kind::Rocket | Kind::Butterfly)
+    matches!(k, Kind::Sun | Kind::Moon | Kind::Star | Kind::Cloud | Kind::Bird | Kind::Rainbow | Kind::Rocket | Kind::Butterfly | Kind::Plane)
 }
 
 fn is_water(k: Kind) -> bool {
@@ -215,7 +219,18 @@ fn name(k: Kind) -> &'static str {
         Kind::Heart => "cœur", Kind::Boat => "bateau", Kind::Apple => "pomme", Kind::Butterfly => "papillon", Kind::Mushroom => "champignon",
         Kind::Rocket => "fusée", Kind::Robot => "robot", Kind::Snowman => "bonhomme de neige", Kind::Rainbow => "arc-en-ciel",
         Kind::Rabbit => "lapin", Kind::Turtle => "tortue", Kind::Castle => "château", Kind::Owl => "hibou", Kind::Cactus => "cactus",
+        Kind::Ball => "ballon", Kind::Plane => "avion", Kind::Bike => "vélo", Kind::Cake => "gâteau", Kind::Gift => "cadeau",
+        Kind::IceCream => "glace", Kind::Pizza => "pizza", Kind::Umbrella => "parapluie",
     }
+}
+
+/// Mots d'une demande qui ne correspondent à rien de connu (pour le dire honnêtement).
+pub fn unknown_words(text: &str) -> Vec<String> {
+    let t = fold(text);
+    t.split(|c: char| !(c.is_alphanumeric() || c == '-'))
+        .filter(|w| w.chars().count() > 2 && kind_of(w).is_none() && !FILLER.contains(w) && color_of(w).is_none() && !NUMBERS.iter().any(|(k, _)| k == w))
+        .map(str::to_string)
+        .collect()
 }
 
 /// Liste des sujets connus, pour l'aide.
@@ -223,6 +238,7 @@ pub fn known_subjects() -> String {
     let mut v: Vec<&str> = [
         Kind::Duck, Kind::Cat, Kind::Dog, Kind::Rabbit, Kind::Turtle, Kind::Owl, Kind::Bird, Kind::Fish, Kind::Butterfly, Kind::House, Kind::Castle,
         Kind::Tree, Kind::Pine, Kind::Flower, Kind::Mushroom, Kind::Cactus, Kind::Apple, Kind::Car, Kind::Boat, Kind::Rocket, Kind::Robot,
+        Kind::Ball, Kind::Plane, Kind::Bike, Kind::Cake, Kind::Gift, Kind::IceCream, Kind::Pizza, Kind::Umbrella,
         Kind::Snowman, Kind::Sun, Kind::Moon, Kind::Star, Kind::Cloud, Kind::Rainbow, Kind::Heart, Kind::Mountain,
     ]
     .iter()
@@ -526,6 +542,38 @@ fn draw_item(p: &mut Pen, k: Kind, x: f32, y: f32, s: f32, color: Option<&str>) 
             let b = c("#3fa34d");
             g(p, x, y, s, &format!(r##"<rect x="-26" y="-24" width="52" height="24" rx="4" fill="#c4734a"/><rect x="-14" y="-120" width="28" height="100" rx="14" fill="{b}"/><path d="M-14,-60 h-16 q-8,0 -8,-8 v-24 q0,-8 7,-8 q7,0 7,8 v16 h10" fill="{b}"/><path d="M14,-74 h16 q8,0 8,-8 v-20 q0,-8 -7,-8 q-7,0 -7,8 v12 h-10" fill="{b}"/><circle cx="0" cy="-124" r="6" fill="#f472b6"/>"##));
         }
+        Kind::Ball => {
+            // Ballon de foot : hexagones et pentagones stylisés.
+            let b = c("#ffffff");
+            g(p, x, y, s, &format!(r##"<circle cx="0" cy="-40" r="40" fill="{b}" stroke="#2b2b2f" stroke-width="3"/><path d="M0,-54 L13,-45 L8,-30 L-8,-30 L-13,-45 Z" fill="#2b2b2f"/><path d="M0,-54 L0,-78 M13,-45 L34,-54 M8,-30 L22,-12 M-8,-30 L-22,-12 M-13,-45 L-34,-54" stroke="#2b2b2f" stroke-width="3"/><path d="M-30,-66 L-16,-78 L-6,-79 M30,-66 L16,-78 L6,-79 M-38,-30 L-34,-54 M38,-30 L34,-54 M-14,-3 L-22,-12 M14,-3 L22,-12" stroke="#2b2b2f" stroke-width="3" fill="none"/><path d="M-34,-54 L-40,-46 L-38,-30 Z M34,-54 L40,-46 L38,-30 Z M-22,-12 L-14,-3 L-28,-8 Z M22,-12 L14,-3 L28,-8 Z M-6,-79 L6,-79 L0,-80 Z" fill="#2b2b2f"/><ellipse cx="-14" cy="-58" rx="8" ry="5" fill="#fff" opacity="0.6"/>"##));
+        }
+        Kind::Plane => {
+            let b = c("#f5f5f2");
+            g(p, x, y, s, &format!(r##"<path d="M-60,0 Q-64,-10 -50,-12 L50,-12 Q66,-10 70,0 Q66,10 50,10 L-50,10 Q-64,10 -60,0 Z" fill="{b}" stroke="#c9ced6" stroke-width="2"/><path d="M-6,-10 L-34,-46 L-20,-46 L22,-10 Z M-6,10 L-34,46 L-20,46 L22,10 Z" fill="#3b82f6"/><path d="M-54,-10 L-66,-32 L-56,-32 L-40,-10 Z" fill="#e5484d"/><g fill="#7cc8ff"><circle cx="34" cy="-2" r="4"/><circle cx="22" cy="-2" r="4"/><circle cx="10" cy="-2" r="4"/><circle cx="-2" cy="-2" r="4"/><circle cx="-14" cy="-2" r="4"/></g><path d="M56,-8 Q64,-6 66,-1 L56,-1 Z" fill="#7cc8ff"/>"##));
+        }
+        Kind::Bike => {
+            let b = c("#e5484d");
+            g(p, x, y, s, &format!(r##"<circle cx="-42" cy="-30" r="28" fill="none" stroke="#2b2b2f" stroke-width="5"/><circle cx="42" cy="-30" r="28" fill="none" stroke="#2b2b2f" stroke-width="5"/><circle cx="-42" cy="-30" r="3" fill="#2b2b2f"/><circle cx="42" cy="-30" r="3" fill="#2b2b2f"/><path d="M-42,-30 L-10,-70 L30,-70 L42,-30 M-10,-70 L0,-30 L30,-70 M0,-30 L-42,-30" stroke="{b}" stroke-width="6" fill="none" stroke-linejoin="round"/><path d="M-18,-78 L0,-78" stroke="#2b2b2f" stroke-width="6" stroke-linecap="round"/><path d="M30,-70 L26,-86 L40,-90" stroke="#2b2b2f" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="0" cy="-30" r="6" fill="#9aa0a6"/>"##));
+        }
+        Kind::Cake => {
+            let b = c("#f7b6c2");
+            g(p, x, y, s, &format!(r##"<ellipse cx="0" cy="0" rx="62" ry="10" fill="#e3e6ea"/><rect x="-50" y="-60" width="100" height="58" rx="6" fill="#c08a55"/><path d="M-50,-60 h100 v14 q-10,10 -20,0 q-10,10 -20,0 q-10,10 -20,0 q-10,10 -20,0 q-10,10 -20,0 Z" fill="{b}"/><rect x="-50" y="-32" width="100" height="8" fill="{b}"/><rect x="-4" y="-86" width="8" height="26" rx="3" fill="#3b82f6"/><path d="M0,-102 Q8,-92 0,-86 Q-8,-92 0,-102 Z" fill="#f7d23e"/><circle cx="-26" cy="-64" r="5" fill="#e5484d"/><circle cx="26" cy="-64" r="5" fill="#e5484d"/>"##));
+        }
+        Kind::Gift => {
+            let b = c("#3b82f6");
+            g(p, x, y, s, &format!(r##"<rect x="-44" y="-70" width="88" height="70" rx="4" fill="{b}"/><rect x="-50" y="-86" width="100" height="20" rx="4" fill="{}"/><rect x="-7" y="-86" width="14" height="86" fill="#f7d23e"/><path d="M0,-86 C-30,-120 -44,-90 0,-86 C44,-90 30,-120 0,-86 Z" fill="none" stroke="#f7d23e" stroke-width="7"/>"##, shade(&b, 0.85)));
+        }
+        Kind::IceCream => {
+            let b = c("#f7b6c2");
+            g(p, x, y, s, &format!(r##"<path d="M-26,-60 L0,0 L26,-60 Z" fill="#e8b46a"/><path d="M-20,-50 L12,-50 M-14,-36 L8,-36 M-22,-58 L-2,-20 M20,-58 L2,-20" stroke="#c48d45" stroke-width="2"/><circle cx="0" cy="-74" r="26" fill="{b}"/><circle cx="-14" cy="-96" r="18" fill="#fff4e0"/><circle cx="14" cy="-98" r="18" fill="#8b5a2b"/><circle cx="0" cy="-118" r="7" fill="#e5484d"/>"##));
+        }
+        Kind::Pizza => {
+            g(p, x, y, s, r##"<circle cx="0" cy="-50" r="50" fill="#e8b46a"/><circle cx="0" cy="-50" r="42" fill="#e5484d"/><circle cx="0" cy="-50" r="38" fill="#f7d77a"/><g fill="#c4473d"><circle cx="-16" cy="-66" r="8"/><circle cx="18" cy="-62" r="8"/><circle cx="-6" cy="-34" r="8"/><circle cx="20" cy="-34" r="7"/><circle cx="-24" cy="-42" r="6"/></g><g fill="#3fa34d"><ellipse cx="4" cy="-74" rx="6" ry="3"/><ellipse cx="-24" cy="-56" rx="6" ry="3"/><ellipse cx="10" cy="-48" rx="6" ry="3"/></g><path d="M0,-50 L0,-88 M0,-50 L33,-31 M0,-50 L-33,-31" stroke="#e8b46a" stroke-width="2"/>"##);
+        }
+        Kind::Umbrella => {
+            let b = c("#8b5cf6");
+            g(p, x, y, s, &format!(r##"<path d="M0,-110 L0,-14 Q0,0 -12,0 Q-22,0 -22,-10" stroke="#5a3a22" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M-70,-90 Q0,-170 70,-90 Q52,-102 35,-90 Q18,-102 0,-90 Q-18,-102 -35,-90 Q-52,-102 -70,-90 Z" fill="{b}"/><path d="M0,-130 Q-18,-110 -35,-90 M0,-130 Q18,-110 35,-90" stroke="{}" stroke-width="2" fill="none"/>"##, shade(&b, 0.8)));
+        }
         Kind::Mountain => {}
     }
 }
@@ -624,6 +672,9 @@ mod tests {
         let s = parse("dessine un dragon").map(|s| s.unknown).unwrap_or_default();
         assert!(s.is_empty() || s == vec!["dragon".to_string()]);
         assert!(parse("dessine un dragon").is_none());
+        let s = parse("crée une image de ballon de foot").unwrap();
+        assert_eq!((s.items.len(), s.items[0].kind, s.items[0].count), (1, Kind::Ball, 1));
+        assert!(unknown_words("crée une image").is_empty());
         let s = parse("dessine deux chats et un chien dans un parc").unwrap();
         assert_eq!(s.items.len(), 2);
         assert_eq!(s.items[0].count, 2);
@@ -646,7 +697,7 @@ mod preview {
     #[ignore]
     fn dump_examples() {
         let dir = std::env::var("NOVA_DRAW_PREVIEW").expect("NOVA_DRAW_PREVIEW");
-        let reqs = ["un canard", "un canard sur un lac au coucher du soleil", "un chat sous la pluie", "un chien dans un parc", "une maison avec un arbre la nuit", "trois étoiles jaunes", "une voiture rouge", "un paysage de montagne", "un robot dans l'espace", "un bonhomme de neige", "un château avec un arc-en-ciel", "un hibou dans une forêt la nuit", "deux lapins et une tortue", "une fusée", "un bateau sur la mer", "une ville la nuit", "un cactus dans le désert", "un papillon et des fleurs"];
+        let reqs = ["un ballon de foot dans un parc", "un avion dans le ciel", "un vélo rouge", "un gâteau d'anniversaire", "un cadeau", "une glace", "une pizza", "un parapluie sous la pluie", "un canard", "un canard sur un lac au coucher du soleil", "un chat sous la pluie", "un chien dans un parc", "une maison avec un arbre la nuit", "trois étoiles jaunes", "une voiture rouge", "un paysage de montagne", "un robot dans l'espace", "un bonhomme de neige", "un château avec un arc-en-ciel", "un hibou dans une forêt la nuit", "deux lapins et une tortue", "une fusée", "un bateau sur la mer", "une ville la nuit", "un cactus dans le désert", "un papillon et des fleurs"];
         for (i, r) in reqs.iter().enumerate() {
             let d = super::render(&super::parse(r).unwrap(), 11);
             std::fs::write(format!("{dir}/{i:02}.svg"), d.svg).unwrap();

@@ -8,16 +8,16 @@ Modèle de compréhension des commandes de NOVA, créé et entraîné de zéro (
 | Taille du fichier | 1.9 Mo |
 | Intentions | 25 |
 | Exemples d'entraînement | 30404 |
-| Durée d'entraînement | 74 s |
-| Temps d'analyse moyen | 0.07 ms par phrase |
+| Durée d'entraînement | 81 s |
+| Temps d'analyse moyen | 0.08 ms par phrase |
 
 ## Précision
 
 | Jeu | Intention | Informations extraites |
 |---|---|---|
-| Entraînement (échantillon) | 100.0 % | 98.4 % |
-| Test (vocabulaire jamais vu) | 91.3 % | 76.9 % |
-| Phrases réalistes écrites à la main | 97.3 % | 100.0 % |
+| Entraînement (échantillon) | 99.9 % | 99.0 % |
+| Test (vocabulaire jamais vu) | 90.9 % | 76.1 % |
+| Phrases réalistes écrites à la main | 98.9 % | 90.6 % |
 
 ## Intentions
 
@@ -25,5 +25,7 @@ Modèle de compréhension des commandes de NOVA, créé et entraîné de zéro (
 
 ## Erreurs restantes (phrases réalistes)
 
-- « résume la révolution française en 5 lignes » → resume (63 %) au lieu de autre
-- « combien d'habitants en belgique » → conversion (32 %) au lieu de autre
+- « combien d'habitants en belgique » → conversion (19 %) au lieu de autre
+- « tu peux me dessiner un chat qui dort » : infos [("sujet", "un chat")] au lieu de [("sujet", "un chat qui dort")]
+- « fais un dessin d'une maison au bord de la mer » : infos [("contenu", "de la"), ("sujet", "mer"), ("sujet", "une maison au bord")] au lieu de [("sujet", "une maison au bord de la mer")]
+- « draw a duck » : infos [] au lieu de [("sujet", "a duck")]
