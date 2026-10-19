@@ -15,6 +15,7 @@ let settings = {};
 let mode = 'chat';
 let conversationId = null;
 let streaming = false;
+let replyId = null;
 
 async function load() {
   try {
@@ -77,6 +78,7 @@ function paint(node, text, status, done, error) {
 
 async function ask(text) {
   streaming = true;
+  setSend(true);
   hold();
   island.classList.add('has-thread', 'busy');
   thread.appendChild(Object.assign(el('<div class="q-user"></div>'), { textContent: text }));
@@ -87,10 +89,10 @@ async function ask(text) {
   document.getElementById('mark').classList.add('spin');
   let reply = '', status = '', frame = 0, finished = false;
   const redraw = () => { frame = 0; if (!finished) { paint(answer, reply, status, false); thread.scrollTop = thread.scrollHeight; } };
-  const end = () => { streaming = false; island.classList.remove('busy'); document.getElementById('mark').classList.remove('spin'); hold(); };
+  const end = () => { streaming = false; replyId = null; setSend(false); island.classList.remove('busy'); document.getElementById('mark').classList.remove('spin'); hold(); };
   const ch = new Channel();
   ch.onmessage = (ev) => {
-    if (ev.type === 'started') conversationId = ev.conversation_id;
+    if (ev.type === 'started') { conversationId = ev.conversation_id; replyId = ev.assistant.id; }
     else if (ev.type === 'status') status = ev.text;
     else if (ev.type === 'delta') reply += ev.text;
     else if (ev.type === 'replace') reply = ev.text;
@@ -122,8 +124,9 @@ async function ask(text) {
 
 // L'île reste ouverte pendant la saisie et pendant une réponse.
 function hold() {
-  const typing = document.activeElement === q && q.value.trim() !== '';
-  invoke('island_hold', { hold: typing || streaming }).catch(() => {});
+  // Seule une saisie en cours garde l'île ouverte (pas une réponse) : elle se replie quand la souris part.
+  const typing = document.hasFocus() && document.activeElement === q && q.value.trim() !== '';
+  invoke('island_hold', { hold: typing }).catch(() => {});
 }
 
 listen('island', (e) => {
@@ -137,7 +140,8 @@ modelSel.onchange = () => { settings.islandModel = modelSel.value; invoke('set_s
 document.getElementById('ask').onsubmit = (e) => {
   e.preventDefault();
   const text = q.value.trim();
-  if (!text || streaming) return;
+  if (streaming) { if (replyId) invoke('cancel_generation', { messageId: replyId }).catch(() => {}); return; }
+  if (!text) return;
   q.value = '';
   ask(text);
 };
@@ -156,6 +160,15 @@ document.querySelector('.isl-panel').addEventListener('mousedown', (e) => {
 window.addEventListener('focus', () => { if (island.classList.contains('open')) q.focus(); });
 q.addEventListener('input', hold);
 q.addEventListener('blur', hold);
+window.addEventListener('blur', hold);
+
+// Pendant une réponse, le bouton Envoyer devient un carré ■ pour l'arrêter.
+function setSend(stop) {
+  const b = document.getElementById('send');
+  b.textContent = stop ? '■' : I18n.t('Envoyer');
+  b.title = stop ? I18n.t('Arrêter la génération') : '';
+  b.classList.toggle('stop', stop);
+}
 q.addEventListener('keydown', (e) => { if (e.key === 'Escape') { q.value = ''; q.blur(); hold(); } });
 
 init();

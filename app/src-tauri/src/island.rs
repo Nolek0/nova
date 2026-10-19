@@ -241,11 +241,14 @@ fn watch(app: AppHandle) {
                 }
                 if h.expanded {
                     // L'île reste ouverte tant que la souris est dessus ou qu'on y écrit.
-                    if in_panel || HOLD.load(Ordering::Relaxed) {
+                    if in_panel {
                         h.outside_since = None;
                     } else {
+                        // Hors de l'île : repli après 0,4 s, ou 6 s au plus si une saisie la retenait.
                         let t = h.outside_since.get_or_insert_with(Instant::now);
-                        if t.elapsed() >= Duration::from_millis(400) {
+                        let held = HOLD.load(Ordering::Relaxed);
+                        if t.elapsed() >= Duration::from_millis(if held { 6000 } else { 400 }) {
+                            HOLD.store(false, Ordering::Relaxed);
                             h.expanded = false;
                             let _ = win.set_ignore_cursor_events(true);
                             let _ = win.emit_to(label.as_str(), "island", false);

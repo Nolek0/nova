@@ -40,3 +40,4 @@ html, body.island-body { background: transparent !important; overflow: hidden; h
 .isl-ask input:focus { border-color: var(--accent); }
 .isl-src { display: flex; align-items: center; gap: 5px; }
 .isl-src svg { width: 12px; height: 12px; }
+.isl-ask .btn.stop { min-width: 40px; font-size: 14px; background: #2a2d36; color: #f2f3f5; }
