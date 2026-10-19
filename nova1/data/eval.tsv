@@ -1,0 +1,74 @@
+salutation	Salut !
+salutation	yo nova
+salutation	bonsoir
+comment_ca_va	salut ça va ou quoi
+comment_ca_va	tu vas bien aujourd'hui ?
+remerciement	merci c'est parfait
+remerciement	ok merci bcp
+au_revoir	bon je vais dormir, bonne nuit
+au_revoir	à plus tard nova
+identite	t'es qui en fait ?
+identite	c'est qui qui t'a créé
+capacites	tu sais faire quoi exactement ?
+heure	il est quelle heure stp
+heure	quelle heure il est
+date	on est le combien aujourd'hui ?
+minuteur	mets un minuteur de 10 minutes	duree=10 minutes
+minuteur	minuteur 3 min pour les pâtes	duree=3 min
+minuteur	lance un timer de 25 minutes	duree=25 minutes
+minuteur	rappelle-moi de sortir le linge dans 40 minutes	duree=40 minutes;contenu=sortir le linge
+minuteur	préviens moi dans une heure	duree=une heure
+minuteur	timer 90 secondes	duree=90 secondes
+annuler_minuteur	stop le minuteur
+annuler_minuteur	annule mon timer
+ouvrir_app	ouvre spotify	app=spotify
+ouvrir_app	lance FL Studio stp	app=FL Studio
+ouvrir_app	tu peux ouvrir discord	app=discord
+ouvrir_app	ouvre l'app calculatrice	app=calculatrice
+ouvrir_app	lance word	app=word
+ouvrir_app	ouvre goodnotes	app=goodnotes
+ouvrir_app	démarre photoshop	app=photoshop
+ouvrir_site	va sur youtube	site=youtube
+ouvrir_site	ouvre github.com	site=github.com
+ouvrir_site	ouvre le site lemonde.fr	site=lemonde.fr
+meteo	météo à Mons	ville=Mons
+meteo	quel temps il fait à bruxelles demain	ville=bruxelles
+meteo	il pleut à Lille ?	ville=Lille
+meteo	la météo
+meteo	il fait combien dehors
+note	note : acheter des oeufs	contenu=acheter des oeufs
+note	crée une note réviser l'anglais ce soir	contenu=réviser l'anglais ce soir
+chercher_fichier	cherche le fichier rapport	requete=rapport
+chercher_fichier	où est mon fichier budget	requete=budget
+recherche_web	cherche sur internet la coupe du monde 2026	requete=la coupe du monde 2026
+calcul	combien font 12 fois 7
+calcul	calcule 15 * 4
+calcul	résous 2x + 3 = 11
+conversion	50 euros en dollars
+conversion	convertis 10 miles en km
+infos_systeme	j'ai combien de ram
+blague	raconte moi une blague
+pile_ou_face	pile ou face ?
+lancer_de	lance un dé
+lancer_de	lance un dé à 20 faces	faces=20
+autre	qui est cristiano ronaldo
+autre	explique-moi la photosynthèse simplement
+autre	définition de droit économique en une phrase
+autre	écris un mail pour dire que je serai absent demain
+autre	donne moi une recette rapide avec des pâtes
+autre	c'est quoi la différence entre un virus et une bactérie
+autre	aide moi à réviser mon contrôle d'histoire
+autre	écris un code python qui affiche bonjour
+autre	comment on fait une bonne prod de trap
+autre	quelle est la capitale de l'australie
+autre	résume la révolution française en 5 lignes
+autre	je suis stressé pour mon exam demain
+autre	traduis "je t'aime" en espagnol
+autre	comment marche un moteur électrique
+autre	pourquoi la mer est salée
+autre	donne-moi des idées de cadeau pour ma mère
+autre	est-ce que les chats voient en couleur
+autre	écris un poème sur l'automne
+autre	combien d'habitants en belgique
+autre	comment ouvrir un fichier zip
+autre	le temps qu'il faut pour cuire un oeuf

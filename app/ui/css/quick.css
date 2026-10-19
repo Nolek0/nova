@@ -1,0 +1,16 @@
+/* Mini-chat flottant (fenêtre transparente sans bordure, macOS). */
+html, body.quick-body { background: transparent !important; overflow: hidden; height: auto; }
+.quick-shell { border-radius: 16px; background: var(--surface); border: 1px solid var(--border-strong); overflow: hidden; display: flex; flex-direction: column; }
+.quick { margin: 0; height: 62px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 18px; -webkit-app-region: drag; }
+.quick .mark { width: 24px; height: 24px; flex: none; }
+.quick .mark::before { inset: 3px; }
+.quick input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 17px; -webkit-app-region: no-drag; }
+.quick input::placeholder { color: var(--text-3); }
+.quick-hint { font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.quick-thread { border-top: 1px solid var(--border); max-height: 420px; overflow-y: auto; padding: 14px 18px; display: grid; gap: 14px; }
+.q-user { justify-self: end; background: var(--raised); padding: 7px 12px; border-radius: 12px; max-width: 85%; white-space: pre-wrap; font-size: 13.5px; }
+.q-ai { font-size: 13.5px; }
+.q-ai .md p { margin-bottom: 8px; }
+.q-ai .error-box { font-size: 12.5px; }
+.quick-foot { flex: none; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--border); }
+.quick-foot .faint { font-size: 11px; }

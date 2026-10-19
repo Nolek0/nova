@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>NOVA — mini-chat</title>
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/quick.css">
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script src="vendor/highlight.min.js"></script>
+  <script type="module" src="js/quick.js"></script>
+</head>
+<body class="quick-body">
+  <div class="quick-shell" id="shell">
+    <form class="quick" id="quick" autocomplete="off">
+      <span class="mark" id="mark"></span>
+      <input id="q" placeholder="Demande à NOVA…" aria-label="Question pour NOVA" spellcheck="true">
+      <span class="quick-hint" id="hint">↵ envoyer · échap fermer</span>
+    </form>
+    <div class="quick-thread hidden" id="thread"></div>
+    <div class="quick-foot hidden" id="foot">
+      <span class="faint" id="model"></span>
+      <span class="grow"></span>
+      <button class="btn small" id="new" type="button">Nouvelle</button>
+      <button class="btn small" id="open" type="button">Ouvrir dans NOVA</button>
+    </div>
+  </div>
+</body>
+</html>

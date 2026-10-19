@@ -1,0 +1,62 @@
+# Builds the Windows installer for a release and adds it (plus its signed update entry)
+# to the GitHub release created from the Mac with scripts/release-mac.sh.
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. v0.3.0)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      - name: Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+      - name: Build installer
+        working-directory: app/src-tauri
+        shell: bash
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            cargo tauri build --bundles nsis
+          else
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY is not set: building without auto-update support."
+            cargo tauri build --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          fi
+      - name: Upload installer and merge latest.json
+        shell: bash
+        run: |
+          cd app/src-tauri/target/release/bundle/nsis
+          EXE=$(ls *-setup.exe | head -1)
+          gh release upload "$TAG" "$EXE" --clobber --repo "$GITHUB_REPOSITORY"
+          if [ -f "$EXE.sig" ]; then
+            gh release download "$TAG" --pattern latest.json --repo "$GITHUB_REPOSITORY" --clobber || echo '{}' > latest.json
+            URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$EXE"
+            python - "$EXE.sig" "$URL" <<'PY'
+          import json, sys
+          sig = open(sys.argv[1]).read().strip()
+          data = json.load(open("latest.json"))
+          data.setdefault("platforms", {})["windows-x86_64"] = {"signature": sig, "url": sys.argv[2]}
+          json.dump(data, open("latest.json", "w"), indent=2)
+          PY
+            gh release upload "$TAG" latest.json --clobber --repo "$GITHUB_REPOSITORY"
+          fi

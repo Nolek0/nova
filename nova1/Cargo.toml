@@ -1,0 +1,18 @@
+[package]
+name = "nova1"
+version = "1.0.0"
+edition = "2021"
+description = "Nova 1 : modèle de compréhension des commandes de NOVA, créé et entraîné de zéro (aucune dépendance)."
+publish = false
+
+[lib]
+name = "nova1"
+
+[[bin]]
+name = "nova1-train"
+path = "src/bin/train.rs"
+
+[dependencies]
+
+[profile.release]
+opt-level = 3

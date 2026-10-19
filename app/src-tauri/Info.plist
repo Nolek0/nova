@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>NOVA utilise la caméra uniquement lorsque tu cliques sur le bouton caméra, pour joindre une photo à la conversation.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NOVA utilise le micro uniquement pendant la dictée, lorsque tu l'actives. L'audio n'est jamais enregistré.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>NOVA transcrit ta voix en texte sur ce Mac pendant la dictée.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>NOVA utilise ta position uniquement si tu demandes la météo locale.</string>
+</dict>
+</plist>

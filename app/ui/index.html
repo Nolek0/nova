@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NOVA</title>
+  <link rel="stylesheet" href="css/app.css">
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script src="vendor/highlight.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <!-- Zone de déplacement de la fenêtre : invisible, au-dessus du contenu, sur toute la largeur. -->
+  <div id="dragbar" data-tauri-drag-region></div>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="titlebar"></div>
+      <div class="brand"><span class="mark"></span>NOVA</div>
+      <button class="new-chat" id="new-chat"></button>
+      <label class="search" id="search"><input placeholder="Rechercher" aria-label="Rechercher dans les conversations"></label>
+      <nav class="side-scroll" id="side-scroll"></nav>
+      <div id="downloads"></div>
+      <div class="status" id="status" title="État des moteurs"></div>
+    </aside>
+    <main id="main">
+      <div class="titlebar"><button class="icon-btn" id="toggle-sidebar" title="Afficher ou masquer la barre latérale"></button></div>
+      <div id="view"></div>
+    </main>
+  </div>
+</body>
+</html>

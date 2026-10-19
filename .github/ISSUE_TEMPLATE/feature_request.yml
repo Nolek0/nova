@@ -1,0 +1,20 @@
+name: ✨ Feature request
+description: Suggest an idea for NOVA
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could NOVA help?
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: This idea keeps NOVA local-first (no account, no hidden network calls).

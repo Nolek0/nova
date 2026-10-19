@@ -1,0 +1,11 @@
+# Compilation
+app/src-tauri/target/
+app/src-tauri/gen/
+app/src-tauri/binaries/
+apple/.build/
+build/
+# Système
+.DS_Store
+Thumbs.db
+dist/
+nova1/target/

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key><string>NOVA</string>
+	<key>CFBundleDisplayName</key><string>NOVA AI</string>
+	<key>CFBundleIdentifier</key><string>local.nova.ai</string>
+	<key>CFBundleExecutable</key><string>NovaAI</string>
+	<key>CFBundlePackageType</key><string>APPL</string>
+	<key>CFBundleShortVersionString</key><string>0.1.0</string>
+	<key>CFBundleVersion</key><string>1</string>
+	<key>CFBundleIconFile</key><string>AppIcon</string>
+	<key>CFBundleDevelopmentRegion</key><string>fr</string>
+	<key>LSMinimumSystemVersion</key><string>26.0</string>
+	<key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+	<key>NSHighResolutionCapable</key><true/>
+	<key>NSSupportsAutomaticTermination</key><false/>
+	<key>NSCameraUsageDescription</key>
+	<string>NOVA utilise la caméra uniquement lorsque tu cliques sur le bouton caméra, pour joindre une photo à la conversation.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NOVA utilise le micro uniquement pendant la dictée, lorsque tu l'actives. L'audio n'est jamais enregistré.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>NOVA transcrit ta voix en texte sur ce Mac pendant la dictée. Rien n'est envoyé sur Internet.</string>
+</dict>
+</plist>

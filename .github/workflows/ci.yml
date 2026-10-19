@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri
+            nova1
+      - name: Placeholder for the macOS helper (built separately with the macOS 26 SDK)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p app/src-tauri/binaries
+          TRIPLE=$(rustc -vV | sed -n 's/^host: //p')
+          printf '#!/bin/sh\necho "{\\"ready\\":false,\\"message\\":\\"CI\\"}"\n' > "app/src-tauri/binaries/nova-apple-helper-$TRIPLE"
+          chmod +x "app/src-tauri/binaries/nova-apple-helper-$TRIPLE"
+      - name: Core tests
+        working-directory: app/src-tauri
+        run: cargo test --lib
+      - name: Nova 1 tests
+        working-directory: nova1
+        run: cargo test --release

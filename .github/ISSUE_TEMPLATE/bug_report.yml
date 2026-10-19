@@ -1,0 +1,44 @@
+name: 🐞 Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open …\n2. Type …\n3. See …"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: NOVA version
+      description: Settings → Updates
+      placeholder: 0.3.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [macOS (Apple Silicon), Windows 11, Windows 10, Other]
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model used
+      placeholder: Gemma 4 12B
+  - type: textarea
+    id: logs
+    attributes:
+      label: Engine log (optional)
+      description: "macOS: ~/Library/Application Support/local.nova.ai/logs/llama-server.log — remove anything private."
+      render: text
