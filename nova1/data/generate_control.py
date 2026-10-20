@@ -97,6 +97,8 @@ def g_nouvelle_note(rng, t):
 
 
 def g_envoyer_mail(rng, t):
+    if rng.random() < 0.35:
+        return g_envoyer_mail_app(rng, t)
     who = pick(rng, PEOPLE, PEOPLE_TEST, t)
     msg = pick(rng, MESSAGES, MESSAGES_TEST, t)
     sub = rng.choice(SUBJECTS)
@@ -110,6 +112,38 @@ def g_envoyer_mail(rng, t):
         return G.polite(rng, f), [("destinataire", who), ("objet", sub), ("message", msg)]
     f = rng.choice([f"envoie un mail à {who}", f"écris un mail à {who}", f"nouveau mail pour {who}", f"prépare un email pour {who}"])
     return G.polite(rng, f), [("destinataire", who)]
+
+
+MAIL_APPS = ["Outlook", "Gmail", "Mail", "Apple Mail", "Spark", "Thunderbird"]
+CHAT_APPS = ["Discord", "WhatsApp", "Instagram", "insta", "Messenger", "Slack", "Teams", "Telegram", "Messages", "Signal", "iMessage"]
+CHAT_APPS_TEST = ["Snapchat", "Viber"]
+CHAT_PEOPLE = ["Tom", "Léa", "maman", "papa", "Lucas", "Inès", "Paul Martin", "mon frère", "Sarah", "le groupe", "Yanis", "Kevin"]
+CHAT_PEOPLE_TEST = ["Noah", "Camille"]
+
+
+def g_envoyer_mail_app(rng, t):
+    """Mails avec la messagerie précisée (« depuis Outlook »)."""
+    who = pick(rng, PEOPLE, PEOPLE_TEST, t)
+    msg = pick(rng, MESSAGES, MESSAGES_TEST, t)
+    app = rng.choice(MAIL_APPS)
+    f = rng.choice([f"envoie un mail à {who} depuis {app} pour lui dire que {msg}", f"avec {app}, envoie un mail à {who} : {msg}",
+                    f"envoie un email via {app} à {who} en disant {msg}", f"écris un mail sur {app} à {who} pour dire {msg}",
+                    f"utilise {app} pour envoyer un mail à {who} disant {msg}", f"envoie un mail à {who} sur {app} avec le message {msg}"])
+    return G.polite(rng, f), [("destinataire", who), ("app", app), ("message", msg)]
+
+
+def g_envoyer_message(rng, t):
+    who = pick(rng, CHAT_PEOPLE, CHAT_PEOPLE_TEST, t)
+    app = pick(rng, CHAT_APPS, CHAT_APPS_TEST, t)
+    msg = pick(rng, MESSAGES, MESSAGES_TEST, t)
+    r = rng.random()
+    if r < 0.75:
+        f = rng.choice([f"envoie un message à {who} sur {app} : {msg}", f"écris à {who} sur {app} pour lui dire que {msg}", f"dis à {who} sur {app} que {msg}",
+                        f"envoie à {who} sur {app} le message {msg}", f"sur {app}, écris à {who} : {msg}", f"envoie un dm à {who} sur {app} : {msg}",
+                        f"réponds à {who} sur {app} : {msg}", f"message {app} à {who} : {msg}", f"préviens {who} sur {app} que {msg}"])
+        return G.polite(rng, f), [("destinataire", who), ("app", app), ("message", msg)]
+    f = rng.choice([f"envoie un message à {who} sur {app}", f"écris à {who} sur {app}", f"ouvre la conversation avec {who} sur {app}"])
+    return G.polite(rng, f), [("destinataire", who), ("app", app)]
 
 
 def g_enregistrer(rng, t):
@@ -209,7 +243,7 @@ SIMPLE = {
 GENERATORS = {
     "ouvrir_app": g_ouvrir_app, "fermer_app": g_fermer_app, "ouvrir_site": g_ouvrir_site, "recherche_web": g_recherche_web,
     "nouvelle_note": g_nouvelle_note, "envoyer_mail": g_envoyer_mail, "enregistrer": g_enregistrer, "menu": g_menu, "cliquer": g_cliquer,
-    "ecrire": g_ecrire, "creer_dossier": g_creer_dossier, "volume": g_volume, "rechercher_page": g_rechercher_page, "defiler": g_defiler,
+    "ecrire": g_ecrire, "creer_dossier": g_creer_dossier, "envoyer_message": g_envoyer_message, "volume": g_volume, "rechercher_page": g_rechercher_page, "defiler": g_defiler,
 }
 for k, forms in SIMPLE.items():
     def mk(forms):
@@ -225,7 +259,7 @@ AUTRE = ["qui est le président de la France", "explique-moi la photosynthèse",
          "je n'aime pas Photoshop", "Photoshop est cher ?", "le mail c'est quoi", "merci", "salut", "bonne nuit"]
 GENERATORS["autre"] = lambda rng, t: (rng.choice(AUTRE), [])
 
-COUNTS = {"enregistrer": 2600, "envoyer_mail": 1800, "ouvrir_app": 1800, "menu": 1500, "cliquer": 1500, "ecrire": 1200, "nouvelle_note": 1200,
+COUNTS = {"enregistrer": 2600, "envoyer_mail": 2600, "envoyer_message": 2200, "ouvrir_app": 1800, "menu": 1500, "cliquer": 1500, "ecrire": 1200, "nouvelle_note": 1200,
           "autre": 1600, "recherche_web": 900, "ouvrir_site": 900, "creer_dossier": 900, "fermer_app": 700, "volume": 600}
 DEFAULT = 450
 

@@ -193,7 +193,7 @@ enum ControlSession {
 
     static let interactive: Set<String> = [
         "AXButton", "AXTextField", "AXTextArea", "AXCheckBox", "AXRadioButton", "AXPopUpButton", "AXComboBox", "AXMenuButton",
-        "AXLink", "AXSlider", "AXIncrementor", "AXSearchField", "AXDisclosureTriangle", "AXCell", "AXRow", "AXTab", "AXSegment", "AXImage", "AXMenuItem",
+        "AXLink", "AXSlider", "AXIncrementor", "AXSearchField", "AXDisclosureTriangle", "AXCell", "AXRow", "AXTab", "AXSegment", "AXImage", "AXMenuItem", "AXWebArea",
     ]
 
     static func label(_ el: AXUIElement) -> String {
@@ -233,11 +233,11 @@ enum ControlSession {
                                             "x": Int(f.midX), "y": Int(f.midY), "w": Int(f.width), "h": Int(f.height)]
                     if attr(el, kAXEnabledAttribute) as? Bool == false { e["disabled"] = true }
                     if attr(el, kAXSubroleAttribute) as? String == (kAXSecureTextFieldSubrole as String) { e["secure"] = true }
-                    if role == "AXTextField" || role == "AXTextArea", let v = attr(el, kAXValueAttribute) as? String, !v.isEmpty { e["value"] = String(v.prefix(60)) }
+                    if role == "AXTextField" || role == "AXTextArea" || role == "AXComboBox", let v = attr(el, kAXValueAttribute) as? String, !v.isEmpty { e["value"] = String(v.prefix(400)) }
                     refs.append(el)
                     out.append(e)
                 }
-            } else if role == "AXStaticText", texts.count < 40, let v = attr(el, kAXValueAttribute) as? String {
+            } else if role == "AXStaticText", texts.count < 120, let v = attr(el, kAXValueAttribute) as? String {
                 let t = v.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !t.isEmpty { texts.append(String(t.prefix(80))) }
             }
@@ -253,6 +253,15 @@ enum ControlSession {
         elements = refs
         var res: [String: Any] = ["app": app.localizedName ?? "", "bundle": app.bundleIdentifier ?? "", "window": windowTitle,
                                   "elements": out, "texts": texts, "menus": menus]
+        // Champ actif (là où le clavier écrit) : position et contenu, pour vérifier ce qui a été tapé.
+        if let f = attr(axApp, kAXFocusedUIElementAttribute) {
+            let fe = f as! AXUIElement
+            var info: [String: Any] = ["role": (attr(fe, kAXRoleAttribute) as? String ?? "").replacingOccurrences(of: "AX", with: ""), "label": label(fe)]
+            if let v = attr(fe, kAXValueAttribute) as? String { info["value"] = String(v.prefix(2000)) }
+            if let fr = frame(of: fe) { info["x"] = Int(fr.midX); info["y"] = Int(fr.midY); info["w"] = Int(fr.width); info["h"] = Int(fr.height) }
+            if attr(fe, kAXSubroleAttribute) as? String == (kAXSecureTextFieldSubrole as String) { info["secure"] = true }
+            res["focused"] = info
+        }
         if let wf = windowFrame { res["window_frame"] = [wf.minX, wf.minY, wf.width, wf.height] }
         if let shot = screenshot(near: windowFrame) { res.merge(shot) { a, _ in a } }
         return res

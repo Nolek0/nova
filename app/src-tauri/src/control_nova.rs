@@ -261,11 +261,11 @@ fn best_element<'v>(obs: &'v Value, want: &str, roles: &[&str]) -> Option<(&'v V
 async fn press(c: &mut Ctx<'_>, e: &Value, why: &str) -> Result<(), String> {
     let (x, y) = (e["x"].as_f64().unwrap_or(0.0), e["y"].as_f64().unwrap_or(0.0));
     let label = e["label"].as_str().unwrap_or("").to_string();
-    move_cursor(c.app, x, y, false, &label);
-    c.pause(140).await;
+    glide(c, x, y, &label).await;
     move_cursor(c.app, x, y, true, &label);
     c.focus().await;
     let r = c.call(json!({"cmd": "press", "element": e["id"]})).await?;
+    c.pause(450).await;
     let ok = r["error"].is_null();
     c.step(&format!("Cliquer sur « {label} »"), why, r["error"].as_str().unwrap_or("ok"), ok);
     if ok { Ok(()) } else { Err(r["error"].as_str().unwrap_or("clic impossible").into()) }
@@ -534,10 +534,97 @@ async fn choose_mail_client(c: &Ctx<'_>, text: &str, app_slot: Option<String>, c
     (apple_mail(), "Aucune messagerie précisée : j'utilise Apple Mail.".into())
 }
 
-/// Écrit le mail dans la messagerie choisie, demande l'accord, puis l'envoie (ou laisse le brouillon).
+// ----------------------------------------------------------------------------- Rédiger, vérifier, envoyer
+
+/// Le curseur néon glisse vers une cible, puis on laisse le temps de le voir arriver.
+async fn glide(c: &Ctx<'_>, x: f64, y: f64, label: &str) {
+    move_cursor(c.app, x, y, false, label);
+    c.pause(420).await;
+}
+
+/// Observe l'écran jusqu'à ce que `ok` soit vrai (ou que le délai soit écoulé).
+async fn wait_for(c: &Ctx<'_>, timeout_ms: u64, ok: impl Fn(&Value) -> bool) -> Result<Option<Value>, String> {
+    let start = std::time::Instant::now();
+    loop {
+        let obs = c.observe().await?;
+        if ok(&obs) {
+            return Ok(Some(obs));
+        }
+        if start.elapsed() >= Duration::from_millis(timeout_ms) {
+            return Ok(None);
+        }
+        c.pause(450).await;
+    }
+}
+
+const TEXT_ROLES: &[&str] = &["TextField", "TextArea", "ComboBox", "SearchField"];
+
+/// Champ de saisie dont le libellé ressemble à l'un des noms donnés (« À », « To », « Objet »…).
+fn field<'v>(obs: &'v Value, names: &[&str]) -> Option<&'v Value> {
+    let els = obs["elements"].as_array()?;
+    let mut best: Option<(&Value, f32)> = None;
+    for e in els.iter().filter(|e| TEXT_ROLES.contains(&e["role"].as_str().unwrap_or("")) && e["secure"] != true) {
+        let l = e["label"].as_str().unwrap_or("");
+        let s = names.iter().map(|n| if fold(l) == fold(n) { 1.0 } else { similarity(n, l) }).fold(0.0, f32::max);
+        if s >= 0.75 && best.map(|b| s > b.1).unwrap_or(true) {
+            best = Some((e, s));
+        }
+    }
+    best.map(|b| b.0)
+}
+
+/// Grande zone de texte (corps d'un mail, champ de message) : la plus grande sous `below_y`.
+fn big_text_area(obs: &Value, below_y: f64) -> Option<&Value> {
+    obs["elements"].as_array()?.iter()
+        .filter(|e| ["TextArea", "WebArea", "TextField"].contains(&e["role"].as_str().unwrap_or("")) && e["secure"] != true)
+        .filter(|e| e["y"].as_f64().unwrap_or(0.0) > below_y)
+        .max_by_key(|e| e["w"].as_i64().unwrap_or(0) * e["h"].as_i64().unwrap_or(0))
+}
+
+/// Le texte (ou son début) est-il visible quelque part : valeurs de champs, textes, champ actif ?
+fn shows(obs: &Value, text: &str) -> bool {
+    let needle: String = fold(text).chars().take(28).collect();
+    if needle.trim().is_empty() {
+        return true;
+    }
+    let mut hay = String::new();
+    for e in obs["elements"].as_array().into_iter().flatten() {
+        hay.push_str(e["value"].as_str().unwrap_or(""));
+        hay.push(' ');
+        hay.push_str(e["label"].as_str().unwrap_or(""));
+        hay.push(' ');
+    }
+    for t in obs["texts"].as_array().into_iter().flatten() {
+        hay.push_str(t.as_str().unwrap_or(""));
+        hay.push(' ');
+    }
+    hay.push_str(obs["focused"]["value"].as_str().unwrap_or(""));
+    fold(&hay).contains(needle.trim())
+}
+
+/// Clique dans un champ (le curseur y va), puis tape le texte. `replace` efface d'abord le contenu.
+async fn fill(c: &mut Ctx<'_>, e: &Value, text: &str, what: &str, replace: bool) -> Result<(), String> {
+    let (x, y) = (e["x"].as_f64().unwrap_or(0.0), e["y"].as_f64().unwrap_or(0.0));
+    glide(c, x, y, what).await;
+    move_cursor(c.app, x, y, true, what);
+    c.focus().await;
+    c.call(json!({"cmd": "click", "x": x, "y": y})).await?;
+    c.pause(350).await;
+    if replace {
+        let _ = c.call(json!({"cmd": "key", "combo": "cmd+a"})).await;
+        c.pause(150).await;
+    }
+    let r = c.call(json!({"cmd": "type", "text": text})).await?;
+    c.pause(500).await;
+    c.step(&format!("{what} : « {} »", text.chars().take(60).collect::<String>()), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+    if r["error"].is_null() { Ok(()) } else { Err(r["error"].as_str().unwrap_or("saisie impossible").into()) }
+}
+
+/// Écrit le mail dans la messagerie choisie, vérifie tout, demande l'accord, envoie, puis vérifie l'envoi.
 async fn send_mail(c: &mut Ctx<'_>, client: &MailClient, why: &str, to: &str, subject: &str, body: &str) -> Result<(), String> {
-    let detail = format!("Avec : {}\nÀ : {to}\nObjet : {subject}\n\n{body}", client.app);
-    // Apple Mail : rédaction et envoi par AppleScript (fiable, sans clic).
+    let name = if client.web { "Gmail" } else { client.app };
+    let detail = format!("Avec : {name}\nÀ : {to}\nObjet : {subject}\n\n{body}");
+    // Apple Mail : rédaction et envoi par AppleScript (fiable, vérifié par Mail lui-même).
     if client.app == "Mail" {
         if !c.allowed(true, &format!("Envoyer un e-mail à {to} avec Mail"), &detail).await? {
             let r = c.call(json!({"cmd": "mail", "to": to, "subject": subject, "body": body, "send": false})).await?;
@@ -548,7 +635,8 @@ async fn send_mail(c: &mut Ctx<'_>, client: &MailClient, why: &str, to: &str, su
         c.step(&format!("Envoyer un e-mail à {to} avec Mail"), why, r["error"].as_str().unwrap_or("envoyé"), r["error"].is_null());
         return if r["error"].is_null() { Ok(()) } else { Err(r["error"].as_str().unwrap_or("envoi impossible").into()) };
     }
-    // Autres messageries : on ouvre une fenêtre de rédaction déjà remplie (lien mailto ou webmail).
+
+    // 1. Ouvrir une fenêtre de nouveau message (pré-remplie quand la messagerie le permet).
     let enc = |s: &str| urlencoding::encode(s).into_owned();
     let (url, app) = if client.web {
         (format!("https://mail.google.com/mail/?view=cm&fs=1&to={}&su={}&body={}", enc(to), enc(subject), enc(body)), None)
@@ -557,29 +645,235 @@ async fn send_mail(c: &mut Ctx<'_>, client: &MailClient, why: &str, to: &str, su
     };
     let r = c.call(json!({"cmd": "open_url", "url": url, "app": app})).await?;
     if !r["error"].is_null() {
-        // Messagerie absente de ce Mac : on retombe sur la messagerie par défaut.
-        c.step(&format!("Ouvrir {}", client.app), why, r["error"].as_str().unwrap_or("échec"), false);
-        let fallback = apple_mail();
-        return Box::pin(send_mail(c, &fallback, &format!("{} n'est pas installé : j'utilise Apple Mail.", client.app), to, subject, body)).await;
+        c.step(&format!("Ouvrir {name}"), why, r["error"].as_str().unwrap_or("échec"), false);
+        return Box::pin(send_mail(c, &apple_mail(), &format!("{name} n'est pas installé : j'utilise Apple Mail."), to, subject, body)).await;
     }
-    c.step(&format!("Rédiger le mail dans {}", if client.web { "Gmail" } else { client.app }), why, "ok", true);
-    c.pause(if client.web { 3500 } else { 1800 }).await;
-    if !c.allowed(true, &format!("Envoyer un e-mail à {to} avec {}", if client.web { "Gmail" } else { client.app }), &detail).await? {
+    c.step(&format!("Nouveau message dans {name}"), why, "ok", true);
+    // 2. Attendre que la fenêtre de rédaction soit vraiment prête (champ « Objet »).
+    c.status(&format!("J'attends que {name} soit prêt…"));
+    let subject_names = ["Objet", "Subject", "Sujet"];
+    let mut obs = match wait_for(c, if client.web { 20000 } else { 15000 }, |o| field(o, &subject_names).is_some()).await? {
+        Some(o) => o,
+        None => {
+            // Secours : nouveau message par le raccourci de l'application.
+            c.focus().await;
+            let _ = c.call(json!({"cmd": "key", "combo": "cmd+n"})).await;
+            c.step("Nouveau message (⌘N)", "La fenêtre de rédaction n'est pas apparue : j'essaie le raccourci.", "ok", true);
+            wait_for(c, 8000, |o| field(o, &subject_names).is_some()).await?.ok_or(format!("La fenêtre de rédaction de {name} n'apparaît pas."))?
+        }
+    };
+    c.pause(600).await;
+    // 3. Vérifier et compléter chaque partie : destinataire, objet, contenu (2 essais chacun).
+    for attempt in 0..2 {
+        if !shows(&obs, to) {
+            if let Some(f) = field(&obs, &["À", "To", "Destinataire", "Destinataires", "Recipients"]).cloned() {
+                fill(c, &f, to, "Destinataire", false).await?;
+                let _ = c.call(json!({"cmd": "key", "combo": "return"})).await;
+                c.pause(400).await;
+            }
+        }
+        if let Some(f) = field(&obs, &subject_names).cloned() {
+            if !shows(&obs, subject) {
+                fill(c, &f, subject, "Objet", true).await?;
+            }
+        }
+        obs = c.observe().await?;
+        if !shows(&obs, body) {
+            let sy = field(&obs, &subject_names).and_then(|f| f["y"].as_f64()).unwrap_or(0.0);
+            match big_text_area(&obs, sy).cloned() {
+                Some(area) => fill(c, &area, body, "Contenu du mail", false).await?,
+                None => {
+                    // Pas de zone repérée : depuis l'objet, Tab mène au corps du message.
+                    if let Some(f) = field(&obs, &subject_names).cloned() {
+                        fill(c, &f, "", "Objet", false).await?;
+                    }
+                    let _ = c.call(json!({"cmd": "key", "combo": "tab"})).await;
+                    c.pause(300).await;
+                    let r = c.call(json!({"cmd": "type", "text": body})).await?;
+                    c.step("Contenu du mail (après Tab)", "Je n'ai pas trouvé la zone du message : je passe par la touche Tab.", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+                }
+            }
+            c.pause(600).await;
+        }
+        obs = c.observe().await?;
+        let (ok_to, ok_sub, ok_body) = (shows(&obs, to), shows(&obs, subject), shows(&obs, body));
+        let mark = |b: bool| if b { "✓" } else { "✗" };
+        c.step(
+            "Vérification du mail",
+            &format!("destinataire {} · objet {} · contenu {}", mark(ok_to), mark(ok_sub), mark(ok_body)),
+            if ok_to && ok_sub && ok_body { "tout est bon" } else if attempt == 0 { "il manque quelque chose : je corrige" } else { "je n'arrive pas à tout relire" },
+            ok_to && ok_sub && ok_body,
+        );
+        if ok_to && ok_sub && ok_body {
+            break;
+        }
+    }
+    let verified = shows(&obs, to) && shows(&obs, subject) && shows(&obs, body);
+    let detail = if verified { detail } else { format!("⚠️ Je n'ai pas pu relire toutes les parties : vérifie la fenêtre de {name} avant d'autoriser.\n\n{detail}") };
+    // 4. Accord, puis envoi (bouton « Envoyer » sinon raccourci).
+    if !c.allowed(true, &format!("Envoyer un e-mail à {to} avec {name}"), &detail).await? {
         c.step("Envoyer le mail", "Envoi refusé : le brouillon reste ouvert pour que tu le relises.", "non envoyé", false);
         return Ok(());
     }
-    c.focus().await;
-    c.key(client.send).await?;
+    for attempt in 0..2 {
+        c.focus().await;
+        let o = c.observe().await?;
+        let btn = ["Envoyer", "Send"].iter().find_map(|l| best_element(&o, l, &["Button"]).filter(|(_, s)| *s >= 0.85).map(|(e, _)| e.clone()));
+        match (attempt, btn) {
+            (0, Some(b)) => press(c, &b, "Je clique sur le bouton d'envoi.").await?,
+            _ => {
+                c.key(client.send).await?;
+                c.step(&format!("Envoyer ({})", client.send), if attempt > 0 { "Le premier essai n'a pas suffi : j'utilise le raccourci." } else { "" }, "ok", true);
+            }
+        }
+        // 5. Vérifier que la fenêtre de rédaction est partie.
+        let gone = wait_for(c, 5000, |o| !(field(o, &subject_names).is_some() && shows(o, subject))).await?.is_some();
+        if gone {
+            c.step(&format!("Mail envoyé à {to}"), &format!("La fenêtre de rédaction de {name} s'est fermée."), "envoyé", true);
+            return Ok(());
+        }
+    }
+    Err(format!("Le mail semble ne pas être parti : la fenêtre de rédaction de {name} est toujours ouverte. Vérifie-la."))
+}
+
+/// Messagerie instantanée : comment l'ouvrir et comment aller dans une conversation.
+struct Chat {
+    keys: &'static [&'static str],
+    app: &'static str,
+    /// Raccourci pour chercher une conversation (None : champ de recherche à l'écran).
+    search: Option<&'static str>,
+    /// Adresse web quand il n'y a pas d'app Mac.
+    url: Option<&'static str>,
+}
+
+const CHATS: &[Chat] = &[
+    Chat { keys: &["discord"], app: "Discord", search: Some("cmd+k"), url: None },
+    Chat { keys: &["whatsapp", "whats app"], app: "WhatsApp", search: Some("cmd+f"), url: None },
+    Chat { keys: &["slack"], app: "Slack", search: Some("cmd+k"), url: None },
+    Chat { keys: &["telegram"], app: "Telegram", search: Some("cmd+f"), url: None },
+    Chat { keys: &["teams"], app: "Microsoft Teams", search: Some("cmd+e"), url: None },
+    Chat { keys: &["signal"], app: "Signal", search: Some("cmd+f"), url: None },
+    Chat { keys: &["messenger"], app: "Messenger", search: Some("cmd+k"), url: None },
+    Chat { keys: &["imessage", "messages", "sms", "texto"], app: "Messages", search: Some("cmd+n"), url: None },
+    Chat { keys: &["instagram", "insta"], app: "Instagram", search: None, url: Some("https://www.instagram.com/direct/inbox/") },
+];
+
+fn chat_named(text: &str) -> Option<&'static Chat> {
+    let f = fold(text);
+    CHATS.iter().find(|c| c.keys.iter().any(|k| f.split(|ch: char| !ch.is_alphanumeric()).any(|w| w == *k) || (k.contains(' ') && f.contains(k))))
+}
+
+/// Envoie un message dans une messagerie instantanée : ouvrir l'app, trouver la conversation,
+/// écrire, vérifier, demander l'accord, envoyer, vérifier l'envoi.
+async fn send_chat(c: &mut Ctx<'_>, chat: &Chat, who: &str, msg: &str) -> Result<(), String> {
+    match chat.url {
+        Some(url) => {
+            let r = c.call(json!({"cmd": "open_url", "url": url})).await?;
+            c.step(&format!("Ouvrir {} dans le navigateur", chat.app), &format!("{} n'a pas d'application Mac : j'utilise le site.", chat.app), r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+            c.pause(4000).await;
+        }
+        None => {
+            open_app(c, chat.app).await?;
+        }
+    }
+    c.status(&format!("J'attends que {} soit prêt…", chat.app));
+    wait_for(c, 15000, |o| o["elements"].as_array().map(|a| a.len() > 5).unwrap_or(false)).await?;
+    c.pause(800).await;
+    // Aller dans la conversation.
+    match chat.search {
+        Some(combo) => {
+            c.key(combo).await?;
+            c.step(&format!("Chercher la conversation ({combo})"), "", "ok", true);
+        }
+        None => {
+            let o = c.observe().await?;
+            match field(&o, &["Rechercher", "Search", "Recherche"]).cloned() {
+                Some(f) => fill(c, &f, "", "Recherche", false).await?,
+                None => {
+                    let _ = c.call(json!({"cmd": "key", "combo": "cmd+f"})).await;
+                }
+            }
+        }
+    }
+    c.pause(600).await;
+    let r = c.call(json!({"cmd": "type", "text": who})).await?;
+    c.step(&format!("Conversation : « {who} »"), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+    c.pause(1300).await;
+    c.key("return").await?;
+    c.pause(1500).await;
+    // Champ du message : le champ actif, sinon la zone de saisie la plus basse de la fenêtre.
+    let mut obs = c.observe().await?;
+    let focused_is_input = TEXT_ROLES.contains(&obs["focused"]["role"].as_str().unwrap_or(""));
+    if !focused_is_input {
+        let input = obs["elements"].as_array().and_then(|a| {
+            a.iter().filter(|e| TEXT_ROLES.contains(&e["role"].as_str().unwrap_or("")) && e["secure"] != true && !fold(e["label"].as_str().unwrap_or("")).contains("recherch"))
+                .max_by_key(|e| e["y"].as_i64().unwrap_or(0))
+                .cloned()
+        });
+        if let Some(f) = input {
+            fill(c, &f, "", "Champ du message", false).await?;
+        }
+    } else if let (Some(x), Some(y)) = (obs["focused"]["x"].as_f64(), obs["focused"]["y"].as_f64()) {
+        glide(c, x, y, "Champ du message").await;
+    }
+    let r = c.call(json!({"cmd": "type", "text": msg})).await?;
+    c.step(&format!("Écrire « {} »", msg.chars().take(60).collect::<String>()), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+    c.pause(700).await;
+    obs = c.observe().await?;
+    let typed = shows(&obs, msg);
+    c.step("Vérification du message", if typed { "Le texte est bien dans le champ." } else { "Je ne peux pas relire le champ : vérifie à l'écran." }, if typed { "ok" } else { "non vérifiable" }, typed);
+    let detail = format!("Avec : {}\nÀ : {who}\n\n{msg}{}", chat.app, if typed { "" } else { "\n\n⚠️ Je n'ai pas pu relire le message : vérifie la conversation ouverte avant d'autoriser." });
+    if !c.allowed(true, &format!("Envoyer un message à {who} sur {}", chat.app), &detail).await? {
+        c.step("Envoyer le message", "Envoi refusé : le texte reste dans le champ.", "non envoyé", false);
+        return Ok(());
+    }
+    c.key("return").await?;
     c.pause(1200).await;
-    // Vérification : si la fenêtre de rédaction est toujours là, on clique sur « Envoyer ».
-    let obs = c.observe().await?;
-    let still = best_element(&obs, "Envoyer", &["Button"]).filter(|(_, s)| *s >= 0.9).map(|(e, _)| e.clone())
-        .or_else(|| best_element(&obs, "Send", &["Button"]).filter(|(_, s)| *s >= 0.9).map(|(e, _)| e.clone()));
-    match still {
-        Some(btn) => press(c, &btn, "Le raccourci n'a pas suffi : je clique sur le bouton d'envoi.").await?,
-        None => c.step(&format!("Envoyer le mail à {to}"), &format!("Raccourci d'envoi de {} ({}).", if client.web { "Gmail" } else { client.app }, client.send), "envoyé", true),
+    let after = c.observe().await?;
+    let still_in_field = fold(after["focused"]["value"].as_str().unwrap_or("")).contains(&fold(msg).chars().take(20).collect::<String>());
+    if still_in_field {
+        c.key("return").await?;
+        c.step("Envoyer (2e essai)", "Le message était encore dans le champ.", "ok", true);
+    } else {
+        c.step(&format!("Message envoyé à {who} sur {}", chat.app), "Le champ de saisie s'est vidé.", "envoyé", true);
     }
     Ok(())
+}
+
+/// Contenu d'un message : après « pour lui dire que », « : », « avec le message »… (le plus long trouvé).
+fn body_in(text: &str) -> Option<String> {
+    let markers = [
+        "pour lui dire que ", "pour lui dire ", "pour leur dire que ", "pour dire que ", "pour dire ", "en lui disant que ", "en disant que ", "en disant ",
+        "disant que ", "disant ", "avec le message ", "avec le texte ", "le message ", "qui dit ", "dis-lui que ", "dis lui que ", "et dis que ",
+        "pour lui écrire ", "écris-lui ", "contenu : ", "contenu ", " : ", " que ",
+    ];
+    let low = text.to_lowercase();
+    let mut best: Option<String> = None;
+    for m in markers {
+        if let Some(i) = low.find(m) {
+            let rest = text[i + m.len()..].trim().trim_start_matches(':').trim().trim_matches(|c| c == '«' || c == '»' || c == '"').trim().to_string();
+            // Les marqueurs sont rangés du plus précis au plus général : le premier trouvé gagne.
+            if rest.chars().count() >= 2 && best.is_none() {
+                best = Some(rest);
+            }
+        }
+    }
+    best
+}
+
+/// Destinataire d'un message : « à Paul », « envoie à maman », « écris à @léa »…
+fn recipient_in(text: &str) -> Option<String> {
+    let re = regex::Regex::new(r"\b(?i:à|a|pour)\s+(@?[\p{L}\d_.\-]+(?:\s+\p{Lu}[\p{L}\-]+)?)").unwrap();
+    let found = re
+        .captures_iter(text)
+        .map(|c| c[1].trim().to_string())
+        .find(|w| !["un", "une", "le", "la", "les", "mon", "ma", "lui", "dire", "partir"].contains(&fold(w).as_str()) && chat_named(w).is_none());
+    found
+}
+
+fn is_mail_request(text: &str) -> bool {
+    let f = fold(text);
+    ["mail", "e-mail", "email", "courriel", "outlook", "gmail"].iter().any(|k| f.contains(k)) || email_in(text).is_some()
 }
 
 /// Exécute une étape comprise par le modèle. Renvoie l'application concernée (pour les étapes suivantes).
@@ -593,7 +887,7 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
     c.status(&format!("« {text} » → {}", p.intent.replace('_', " ")));
     // « dans Photoshop, … » : on passe d'abord sur la bonne application.
     if let Some(a) = slot("app") {
-        if p.intent != "ouvrir_app" && p.intent != "fermer_app" && p.intent != "envoyer_mail" && current_app.as_deref().map(|c| fold(c) != fold(&a)).unwrap_or(true) {
+        if !["ouvrir_app", "fermer_app", "envoyer_mail", "envoyer_message"].contains(&p.intent.as_str()) && current_app.as_deref().map(|c| fold(c) != fold(&a)).unwrap_or(true) {
             *current_app = Some(open_app(c, &a).await?);
         }
     }
@@ -632,7 +926,29 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
             c.step(&format!("Note « {title} » dans Notes"), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
             *current_app = Some("Notes".into());
         }
-        "envoyer_mail" => {
+        "envoyer_mail" | "envoyer_message" if !is_mail_request(text) && (p.intent == "envoyer_message" || chat_named(text).is_some()) => {
+            // Messagerie instantanée (Discord, WhatsApp, Instagram…) : celle nommée, sinon celle qu'on vient d'ouvrir.
+            let chat = chat_named(text).or_else(|| current_app.as_deref().and_then(chat_named)).or_else(|| slot("app").as_deref().and_then(chat_named));
+            let Some(chat) = chat else {
+                let a = c.ask("Sur quelle messagerie envoyer ce message (Discord, WhatsApp, Messages, Instagram…) ?").await?;
+                let chat = chat_named(&a).ok_or("Messagerie non reconnue.")?;
+                return Box::pin(execute(c, &format!("{text} sur {}", chat.app), current_app)).await;
+            };
+            let who = slot("destinataire").filter(|w| !w.contains('@')).or_else(|| recipient_in(text)).map(Ok).unwrap_or_else(|| Err(()));
+            let who = match who {
+                Ok(w) => w,
+                Err(_) => c.ask(&format!("À qui envoyer le message sur {} ?", chat.app)).await?,
+            };
+            let msg = body_in(text).or_else(|| slot("message")).filter(|m| !m.trim().is_empty());
+            let msg = match msg {
+                Some(m) => m,
+                None => c.ask("Quel message veux-tu envoyer ?").await?,
+            };
+            c.step(&format!("Message pour {who} sur {}", chat.app), &format!("{} est une messagerie : je vais ouvrir la conversation avec {who}, écrire, vérifier puis envoyer après ton accord.", chat.app), "ok", true);
+            send_chat(c, chat, &who, &msg).await?;
+            *current_app = Some(chat.app.to_string());
+        }
+        "envoyer_mail" | "envoyer_message" => {
             let mut to = email_in(text).or_else(|| slot("destinataire").filter(|d| d.contains('@')));
             if to.is_none() {
                 let who = slot("destinataire").unwrap_or_else(|| "ce destinataire".into());
@@ -640,7 +956,7 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
                 to = email_in(&a);
             }
             let to = to.ok_or("Adresse e-mail invalide.")?;
-            let body = slot("message").or_else(|| after(text, &["pour lui dire que ", "pour lui dire ", "pour dire que ", "pour dire ", "disant ", " : ", "message "])).unwrap_or_default();
+            let body = body_in(text).or_else(|| slot("message")).unwrap_or_default();
             let body = if body.is_empty() { c.ask("Que veux-tu écrire dans ce mail ?").await? } else { body };
             let subject = slot("objet").unwrap_or_else(|| {
                 let s: String = body.split_whitespace().take(6).collect::<Vec<_>>().join(" ");
@@ -783,6 +1099,14 @@ mod tests {
         assert!(client_named("Photoshop").is_none());
         assert_eq!(client_named("gmail").unwrap().app, "Gmail");
         assert_eq!(client_named("Mail").unwrap().app, "Mail");
+        assert_eq!(body_in("envoie un mail à paul@exemple.fr depuis outlook pour lui dire que je serai en retard").as_deref(), Some("je serai en retard"));
+        assert_eq!(body_in("écris à Léa sur Discord : on se voit à 18h").as_deref(), Some("on se voit à 18h"));
+        assert_eq!(chat_named("envoie un message à Tom sur insta").unwrap().app, "Instagram");
+        assert_eq!(chat_named("sur Discord").unwrap().app, "Discord");
+        assert!(chat_named("envoie un mail à paul").is_none());
+        assert_eq!(recipient_in("envoie un message à Tom sur Discord pour dire salut").as_deref(), Some("Tom"));
+        assert_eq!(body_in("dis à Léa sur insta que la soirée est annulée").as_deref(), Some("la soirée est annulée"));
+        assert!(is_mail_request("envoie un mail depuis Outlook") && !is_mail_request("écris à Léa sur Discord"));
         assert_eq!(split_steps("ouvre Outlook et envoie un mail à paul@exemple.fr pour dire bonjour"), vec!["ouvre Outlook", "envoie un mail à paul@exemple.fr pour dire bonjour"]);
     }
 }

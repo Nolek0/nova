@@ -21,3 +21,7 @@ fermer_app	ferme Safari	app=Safari
 lecture_pause	mets pause	
 autre	comment on enregistre une image en png	
 autre	explique moi photoshop	
+envoyer_mail	envoie un mail à paul@exemple.fr depuis outlook pour lui dire que je serai en retard	destinataire=paul@exemple.fr;app=outlook;message=je serai en retard
+envoyer_message	envoie un message à Tom sur Discord : on joue ce soir ?	destinataire=Tom;app=Discord;message=on joue ce soir ?
+envoyer_message	écris à maman sur WhatsApp pour lui dire que j'arrive	destinataire=maman;app=WhatsApp;message=j'arrive
+envoyer_message	dis à Léa sur insta que la soirée est annulée	destinataire=Léa;app=insta;message=la soirée est annulée

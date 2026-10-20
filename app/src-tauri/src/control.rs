@@ -665,7 +665,8 @@ pub async fn control_start(state: State<'_, AppState>, app: AppHandle, goal: Str
             }
             show_cursor(&app);
             hide_main(&app);
-            tokio::time::sleep(Duration::from_millis(300)).await;
+            // Le temps que les fenêtres du curseur néon soient prêtes (sinon les premiers mouvements sont perdus).
+            tokio::time::sleep(Duration::from_millis(1100)).await;
             crate::control_nova::run(&state, &app, &goal, &mode, &cancel, &on_event).await
         }
         .await;

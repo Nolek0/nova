@@ -97,8 +97,11 @@ function renderSteps(S, box, rerender) {
       if (s.decided) { card.querySelector('.row').innerHTML = `<span class="faint">${s.decided === 'yes' ? 'Autorisé' : 'Refusé'}</span>`; }
       else {
         const decide = (allow) => { s.decided = allow ? 'yes' : 'no'; invoke('control_decide', { id: s.id, allow }); rerender(); };
-        card.querySelector('[data-yes]').onclick = () => decide(true);
+        // « Autoriser » ne réagit qu'à un vrai clic de souris : une touche (Entrée, Espace), même tapée
+        // par erreur ou par une application, ne peut rien autoriser. « Refuser » accepte tout.
+        card.querySelector('[data-yes]').onclick = (e) => { if (e.detail > 0 && e.isTrusted) decide(true); };
         card.querySelector('[data-no]').onclick = () => decide(false);
+        card.querySelector('[data-yes]').tabIndex = -1;
       }
       box.appendChild(card);
     } else if (s.type === 'step') {

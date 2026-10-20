@@ -1,6 +1,6 @@
 [package]
 name = "nova-ai"
-version = "0.4.2"
+version = "0.4.3"
 description = "NOVA AI — assistant personnel local pour macOS et Windows"
 edition = "2021"
 publish = false

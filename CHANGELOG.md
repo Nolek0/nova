@@ -2,6 +2,16 @@
 
 All notable changes to NOVA are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.4.3] — 2026-10-20
+
+### Changed
+- **Nova Control works like a person, step by step**: it waits until the app is really ready, glides the cursor to each field, fills the recipient, subject and body, **checks** each part (and fixes what is missing), asks for approval, sends, then **checks that the message really left** (and retries another way if not).
+- E-mails in Outlook, Spark, Thunderbird, Gmail… now include the message body (some apps ignore it in pre-filled e-mails: Nova Control types it itself).
+- New: **messages** in Discord, WhatsApp, Messages, Slack, Telegram, Teams, Signal, Messenger and Instagram (web): open the conversation, write, check, send after approval.
+- Better understanding of the recipient and the content (“tell Léa on Insta that…”, “from Outlook saying…”); the Nova Control model was retrained with more examples.
+- The neon cursor is shown from the first move.
+- Safety: **Allow** only reacts to a real mouse click (never to a key press).
+
 ## [0.4.2] — 2026-10-20
 
 ### Added
