@@ -235,7 +235,11 @@ mod tests {
         assert!(matches!(detect("crée une note : acheter du pain", &[]), Some(Ok(ActionKind::CreateNote { .. }))));
         assert!(detect("Explique-moi la relativité", &[]).is_none());
         assert!(matches!(detect("ouvre Zzzqqqxx", &[]), Some(Err(_))));
+        // Le nom localisé « Calculatrice » n'existe que sur un Mac en français ; « Calculator » partout.
         #[cfg(target_os = "macos")]
-        assert!(matches!(detect("ouvre la calculatrice", &[]), Some(Ok(ActionKind::OpenApp { .. }))));
+        assert!(
+            matches!(detect("ouvre la calculatrice", &[]), Some(Ok(ActionKind::OpenApp { .. })))
+                || matches!(detect("ouvre Calculator", &[]), Some(Ok(ActionKind::OpenApp { .. })))
+        );
     }
 }
