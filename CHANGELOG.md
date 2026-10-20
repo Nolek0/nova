@@ -2,6 +2,15 @@
 
 All notable changes to NOVA are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.4.4] — 2026-10-20
+
+### Changed
+- **Mandatory checks before sending** in chat apps: Nova Control confirms that the open conversation is the right person (window title, “Message @…” field, header). If it is not sure, it picks the matching search result itself, checks again, then asks for the exact name — and never sends to an unconfirmed conversation, whatever the permission mode. The approval card shows the proof (“Open conversation: …”).
+- E-mails whose recipient, subject or body cannot be read back always ask for approval, even in “Accept all”.
+- “Send a message to X and send him hi” is understood as one request: Nova Control no longer asks for something already said.
+- The neon cursor now accompanies **every** action (typing, shortcuts, opening apps and websites, menus, scrolling) with a label.
+- Apps built with web technologies (Discord, Slack, WhatsApp, Teams…) are now readable by Nova Control.
+
 ## [0.4.3] — 2026-10-20
 
 ### Changed

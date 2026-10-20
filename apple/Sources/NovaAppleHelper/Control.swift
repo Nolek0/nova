@@ -59,6 +59,19 @@ enum ControlSession {
             let ax = AXIsProcessTrustedWithOptions(opts)
             let screen = CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess()
             return ["accessibility": ax, "screen": screen]
+        case "where":
+            // Où se passe l'action (sans capture d'écran) : champ actif, sinon fenêtre active, sinon centre de l'écran.
+            guard let app = targetApp() else { return ["x": 0, "y": 0] }
+            let axApp = AXUIElementCreateApplication(app.processIdentifier)
+            enableWebAccessibility(axApp)
+            if let f = attr(axApp, kAXFocusedUIElementAttribute), let fr = frame(of: f as! AXUIElement), fr.width > 1 {
+                return ["x": Int(fr.midX), "y": Int(fr.midY), "kind": "focused"]
+            }
+            if let w = attr(axApp, kAXFocusedWindowAttribute), let fr = frame(of: w as! AXUIElement) {
+                return ["x": Int(fr.midX), "y": Int(fr.minY + min(120, fr.height / 2)), "kind": "window"]
+            }
+            let m = NSScreen.main?.frame ?? .zero
+            return ["x": Int(m.midX), "y": Int(m.height / 2), "kind": "screen"]
         case "observe":
             return observe(maxElements: r["max_elements"] as? Int ?? 160)
         case "press":
@@ -162,6 +175,18 @@ enum ControlSession {
         return AXUIElementCopyAttributeValue(el, name as CFString, &v) == .success ? v : nil
     }
 
+    /// Les apps faites avec des technologies web (Discord, Slack, WhatsApp, Teams…) cachent leur
+    /// interface aux outils d'accessibilité tant qu'on ne le leur demande pas.
+    nonisolated(unsafe) static var webEnabled: Set<pid_t> = []
+    static func enableWebAccessibility(_ axApp: AXUIElement) {
+        var pid: pid_t = 0
+        AXUIElementGetPid(axApp, &pid)
+        if webEnabled.contains(pid) { return }
+        webEnabled.insert(pid)
+        AXUIElementSetAttributeValue(axApp, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        usleep(300_000)
+    }
+
     static func frame(of el: AXUIElement) -> CGRect? {
         guard let p = attr(el, kAXPositionAttribute), let s = attr(el, kAXSizeAttribute) else { return nil }
         var pt = CGPoint.zero, sz = CGSize.zero
@@ -213,6 +238,7 @@ enum ControlSession {
         }
         guard let app = targetApp() else { return ["error": "Aucune application au premier plan."] }
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
+        enableWebAccessibility(axApp)
         var out: [[String: Any]] = []
         var refs: [AXUIElement] = []
         var texts: [String] = []

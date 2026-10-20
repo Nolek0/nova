@@ -177,6 +177,25 @@ fn folder_path(name: &str) -> Option<std::path::PathBuf> {
     Some(home.join(sub))
 }
 
+/// Étiquette du curseur pour une commande du module Mac (None : commande sans action visible).
+fn cursor_label(v: &Value) -> Option<String> {
+    let short = |s: &str| s.chars().take(40).collect::<String>();
+    Some(match v["cmd"].as_str()? {
+        "type" => format!("Taper « {} »", short(v["text"].as_str().unwrap_or(""))),
+        "key" => format!("⌘ {}", v["combo"].as_str().unwrap_or("")).replace("⌘ cmd+", "⌘").replace("cmd+", "⌘"),
+        "scroll" => "Défiler".into(),
+        "open_url" => format!("Ouvrir {}", short(v["url"].as_str().unwrap_or("").trim_start_matches("https://"))),
+        "open_app" | "focus_app" => format!("Ouvrir {}", v["name"].as_str().unwrap_or("")),
+        "menu" => format!("Menu {}", v["path"].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join(" › ")).unwrap_or_default()),
+        "mail" => "Mail".into(),
+        "note" => "Note".into(),
+        "volume" => "Volume".into(),
+        "media" => "Musique".into(),
+        "click" => "Clic".into(),
+        _ => return None,
+    })
+}
+
 // ----------------------------------------------------------------------------- Exécution
 
 struct Ctx<'a> {
@@ -200,6 +219,21 @@ impl Ctx<'_> {
     async fn call(&self, v: Value) -> Result<Value, String> {
         if self.cancel.is_cancelled() {
             return Err("cancelled".into());
+        }
+        // Le curseur néon accompagne CHAQUE action : il va là où elle a lieu (champ actif, fenêtre,
+        // position du clic), avec une étiquette, puis « clique » au moment où l'action part.
+        if let Some(label) = cursor_label(&v) {
+            let (x, y) = if v["cmd"] == "click" {
+                (v["x"].as_f64().unwrap_or(0.0), v["y"].as_f64().unwrap_or(0.0))
+            } else {
+                let w = call(self.app, json!({"cmd": "where"})).await.unwrap_or_default();
+                (w["x"].as_f64().unwrap_or(0.0), w["y"].as_f64().unwrap_or(0.0))
+            };
+            if x > 0.0 || y > 0.0 {
+                move_cursor(self.app, x, y, false, &label);
+                self.pause(380).await;
+                move_cursor(self.app, x, y, true, &label);
+            }
         }
         call(self.app, v).await
     }
@@ -711,7 +745,15 @@ async fn send_mail(c: &mut Ctx<'_>, client: &MailClient, why: &str, to: &str, su
     let verified = shows(&obs, to) && shows(&obs, subject) && shows(&obs, body);
     let detail = if verified { detail } else { format!("⚠️ Je n'ai pas pu relire toutes les parties : vérifie la fenêtre de {name} avant d'autoriser.\n\n{detail}") };
     // 4. Accord, puis envoi (bouton « Envoyer » sinon raccourci).
-    if !c.allowed(true, &format!("Envoyer un e-mail à {to} avec {name}"), &detail).await? {
+    // Vérification incomplète : l'accord est obligatoire, même en mode « Tout accepter ».
+    let ok = if verified {
+        c.allowed(true, &format!("Envoyer un e-mail à {to} avec {name}"), &detail).await?
+    } else {
+        let ok = crate::control::ask_approval(c.app, c.channel, format!("Envoyer un e-mail à {to} avec {name}"), detail, c.cancel).await;
+        hide_main(c.app);
+        ok
+    };
+    if !ok {
         c.step("Envoyer le mail", "Envoi refusé : le brouillon reste ouvert pour que tu le relises.", "non envoyé", false);
         return Ok(());
     }
@@ -763,8 +805,95 @@ fn chat_named(text: &str) -> Option<&'static Chat> {
     CHATS.iter().find(|c| c.keys.iter().any(|k| f.split(|ch: char| !ch.is_alphanumeric()).any(|w| w == *k) || (k.contains(' ') && f.contains(k))))
 }
 
-/// Envoie un message dans une messagerie instantanée : ouvrir l'app, trouver la conversation,
-/// écrire, vérifier, demander l'accord, envoyer, vérifier l'envoi.
+/// Preuve que la conversation ouverte est bien celle de `who` : titre de la fenêtre, champ de saisie
+/// (« Envoyer un message à @… »), ou en-tête visible. `None` si rien ne le confirme.
+fn conversation_proof(obs: &Value, who: &str) -> Option<String> {
+    let w = fold(who.trim_start_matches('@'));
+    if w.chars().count() < 2 {
+        return None;
+    }
+    let has = |t: &str| {
+        let f = fold(t);
+        f.contains(&w) || f.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '.').any(|tok| tok.len() >= 3 && similarity(&w, tok) >= 0.92)
+    };
+    if let Some(t) = obs["window"].as_str().filter(|t| has(t)) {
+        return Some(format!("fenêtre « {t} »"));
+    }
+    for e in obs["elements"].as_array().into_iter().flatten() {
+        if TEXT_ROLES.contains(&e["role"].as_str().unwrap_or("")) {
+            let l = e["label"].as_str().unwrap_or("");
+            if has(l) {
+                return Some(format!("champ « {l} »"));
+            }
+        }
+    }
+    let f = &obs["focused"];
+    if TEXT_ROLES.contains(&f["role"].as_str().unwrap_or("")) && has(f["label"].as_str().unwrap_or("")) {
+        return Some(format!("champ « {} »", f["label"].as_str().unwrap_or("")));
+    }
+    // En-tête : les premiers textes de la fenêtre (le nom de la conversation y figure en général).
+    for t in obs["texts"].as_array().into_iter().flatten().take(25).filter_map(|t| t.as_str()) {
+        if has(t) && t.chars().count() <= 60 {
+            return Some(format!("titre « {t} »"));
+        }
+    }
+    None
+}
+
+/// Ouvre la conversation avec `who` puis VÉRIFIE que c'est la bonne. Renvoie la preuve trouvée.
+async fn open_conversation(c: &mut Ctx<'_>, chat: &Chat, who: &str) -> Result<Option<String>, String> {
+    for attempt in 0..2 {
+        match chat.search {
+            Some(combo) => c.key(combo).await?,
+            None => {
+                let o = c.observe().await?;
+                match field(&o, &["Rechercher", "Search", "Recherche"]).cloned() {
+                    Some(f) => fill(c, &f, "", "Recherche", false).await?,
+                    None => c.key("cmd+f").await?,
+                }
+            }
+        }
+        c.pause(700).await;
+        if attempt > 0 {
+            let _ = c.call(json!({"cmd": "key", "combo": "cmd+a"})).await;
+        }
+        c.call(json!({"cmd": "type", "text": who})).await?;
+        c.step(&format!("Chercher la conversation « {who} »"), if attempt > 0 { "Deuxième essai, en choisissant moi-même le bon résultat." } else { "" }, "ok", true);
+        c.pause(1800).await;
+        if attempt == 0 {
+            c.key("return").await?;
+        } else {
+            // On choisit dans la liste le résultat dont le nom correspond le mieux (au lieu du premier).
+            let o = c.observe().await?;
+            let best = o["elements"].as_array().and_then(|a| {
+                a.iter()
+                    .filter(|e| !TEXT_ROLES.contains(&e["role"].as_str().unwrap_or("")))
+                    .map(|e| (e, similarity(who.trim_start_matches('@'), e["label"].as_str().unwrap_or(""))))
+                    .filter(|(_, s)| *s >= 0.8)
+                    .max_by(|x, y| x.1.partial_cmp(&y.1).unwrap())
+                    .map(|(e, _)| e.clone())
+            });
+            match best {
+                Some(e) => press(c, &e, &format!("Le résultat qui correspond à « {who} ».")).await?,
+                None => c.key("return").await?,
+            }
+        }
+        c.pause(1600).await;
+        let o = c.observe().await?;
+        if let Some(proof) = conversation_proof(&o, who) {
+            c.step(&format!("Conversation avec {who} vérifiée"), &format!("Preuve : {proof}."), "c'est la bonne personne", true);
+            return Ok(Some(proof));
+        }
+        c.step(&format!("Vérification de la conversation avec {who}"), "Je ne vois nulle part son nom : ce n'est peut-être pas la bonne conversation.", "non confirmée", false);
+        let _ = c.call(json!({"cmd": "key", "combo": "escape"})).await;
+        c.pause(400).await;
+    }
+    Ok(None)
+}
+
+/// Envoie un message dans une messagerie instantanée. Vérifications OBLIGATOIRES avant l'envoi :
+/// la conversation ouverte doit être celle du destinataire, et le texte doit être dans le champ.
+/// Si la conversation n'est pas confirmée, rien n'est envoyé (quel que soit le mode d'autorisation).
 async fn send_chat(c: &mut Ctx<'_>, chat: &Chat, who: &str, msg: &str) -> Result<(), String> {
     match chat.url {
         Some(url) => {
@@ -779,30 +908,22 @@ async fn send_chat(c: &mut Ctx<'_>, chat: &Chat, who: &str, msg: &str) -> Result
     c.status(&format!("J'attends que {} soit prêt…", chat.app));
     wait_for(c, 15000, |o| o["elements"].as_array().map(|a| a.len() > 5).unwrap_or(false)).await?;
     c.pause(800).await;
-    // Aller dans la conversation.
-    match chat.search {
-        Some(combo) => {
-            c.key(combo).await?;
-            c.step(&format!("Chercher la conversation ({combo})"), "", "ok", true);
+    // 1. La bonne conversation, vérifiée (sinon on demande le nom exact, sinon on n'envoie pas).
+    let mut who = who.to_string();
+    let mut proof = open_conversation(c, chat, &who).await?;
+    if proof.is_none() {
+        let a = c.ask(&format!("Je n'arrive pas à confirmer que la conversation ouverte est celle de « {who} » sur {}. Quel est son nom exact (pseudo affiché) ? Réponds « annuler » pour arrêter.", chat.app)).await?;
+        if fold(&a).starts_with("annul") {
+            return Err("Envoi annulé : conversation non confirmée.".into());
         }
-        None => {
-            let o = c.observe().await?;
-            match field(&o, &["Rechercher", "Search", "Recherche"]).cloned() {
-                Some(f) => fill(c, &f, "", "Recherche", false).await?,
-                None => {
-                    let _ = c.call(json!({"cmd": "key", "combo": "cmd+f"})).await;
-                }
-            }
-        }
+        who = a.trim().to_string();
+        proof = open_conversation(c, chat, &who).await?;
     }
-    c.pause(600).await;
-    let r = c.call(json!({"cmd": "type", "text": who})).await?;
-    c.step(&format!("Conversation : « {who} »"), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
-    c.pause(1300).await;
-    c.key("return").await?;
-    c.pause(1500).await;
-    // Champ du message : le champ actif, sinon la zone de saisie la plus basse de la fenêtre.
-    let mut obs = c.observe().await?;
+    let Some(proof) = proof else {
+        return Err(format!("Rien n'a été envoyé : je n'ai pas pu confirmer la conversation avec « {who} » sur {}.", chat.app));
+    };
+    // 2. Écrire dans le champ du message.
+    let obs = c.observe().await?;
     let focused_is_input = TEXT_ROLES.contains(&obs["focused"]["role"].as_str().unwrap_or(""));
     if !focused_is_input {
         let input = obs["elements"].as_array().and_then(|a| {
@@ -813,22 +934,39 @@ async fn send_chat(c: &mut Ctx<'_>, chat: &Chat, who: &str, msg: &str) -> Result
         if let Some(f) = input {
             fill(c, &f, "", "Champ du message", false).await?;
         }
-    } else if let (Some(x), Some(y)) = (obs["focused"]["x"].as_f64(), obs["focused"]["y"].as_f64()) {
-        glide(c, x, y, "Champ du message").await;
     }
     let r = c.call(json!({"cmd": "type", "text": msg})).await?;
     c.step(&format!("Écrire « {} »", msg.chars().take(60).collect::<String>()), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
     c.pause(700).await;
-    obs = c.observe().await?;
+    // 3. Vérification finale juste avant l'envoi : toujours la bonne conversation, et le bon texte.
+    let obs = c.observe().await?;
+    let still_right = conversation_proof(&obs, &who).is_some();
     let typed = shows(&obs, msg);
-    c.step("Vérification du message", if typed { "Le texte est bien dans le champ." } else { "Je ne peux pas relire le champ : vérifie à l'écran." }, if typed { "ok" } else { "non vérifiable" }, typed);
-    let detail = format!("Avec : {}\nÀ : {who}\n\n{msg}{}", chat.app, if typed { "" } else { "\n\n⚠️ Je n'ai pas pu relire le message : vérifie la conversation ouverte avant d'autoriser." });
-    if !c.allowed(true, &format!("Envoyer un message à {who} sur {}", chat.app), &detail).await? {
+    let mark = |b: bool| if b { "✓" } else { "✗" };
+    c.step("Vérification avant envoi", &format!("destinataire {} {who} · message {}", mark(still_right), mark(typed)), if still_right && typed { "tout est bon" } else { "à confirmer" }, still_right && typed);
+    if !still_right {
+        let _ = c.call(json!({"cmd": "key", "combo": "cmd+a"})).await;
+        let _ = c.call(json!({"cmd": "key", "combo": "delete"})).await;
+        return Err(format!("Envoi annulé par sécurité : la conversation affichée n'est plus celle de « {who} ». J'ai effacé le texte."));
+    }
+    let detail = format!(
+        "Avec : {}\nÀ : {who}\nConversation ouverte : {proof}\n\n{msg}{}",
+        chat.app,
+        if typed { "" } else { "\n\n⚠️ Je n'ai pas pu relire le texte dans le champ : regarde la conversation avant d'autoriser." }
+    );
+    // Texte non relu : on demande toujours l'accord, même en mode « Tout accepter ».
+    let ok = if typed { c.allowed(true, &format!("Envoyer un message à {who} sur {}", chat.app), &detail).await? } else {
+        let ok = crate::control::ask_approval(c.app, c.channel, format!("Envoyer un message à {who} sur {}", chat.app), detail, c.cancel).await;
+        hide_main(c.app);
+        ok
+    };
+    if !ok {
         c.step("Envoyer le message", "Envoi refusé : le texte reste dans le champ.", "non envoyé", false);
         return Ok(());
     }
     c.key("return").await?;
     c.pause(1200).await;
+    // 4. Le message est-il parti ? (le champ s'est vidé)
     let after = c.observe().await?;
     let still_in_field = fold(after["focused"]["value"].as_str().unwrap_or("")).contains(&fold(msg).chars().take(20).collect::<String>());
     if still_in_field {
@@ -845,7 +983,7 @@ fn body_in(text: &str) -> Option<String> {
     let markers = [
         "pour lui dire que ", "pour lui dire ", "pour leur dire que ", "pour dire que ", "pour dire ", "en lui disant que ", "en disant que ", "en disant ",
         "disant que ", "disant ", "avec le message ", "avec le texte ", "le message ", "qui dit ", "dis-lui que ", "dis lui que ", "et dis que ",
-        "pour lui écrire ", "écris-lui ", "contenu : ", "contenu ", " : ", " que ",
+        "pour lui écrire ", "écris-lui ", "écris lui ", "envoie-lui ", "envoie lui ", "envoies-lui ", "dis-lui ", "dis lui ", "et lui dire ", "lui dire ", "envoie-leur ", "contenu : ", "contenu ", " : ", " que ",
     ];
     let low = text.to_lowercase();
     let mut best: Option<String> = None;
@@ -1052,8 +1190,31 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
 }
 
 /// Accomplit la tâche avec le cerveau intégré. Renvoie (résumé, nombre d'actions).
+/// « envoie un message à X » + « envoie-lui salut » = une seule demande (destinataire + contenu) :
+/// on ne redemande jamais ce que l'utilisateur a déjà dit.
+pub fn merge_followups(steps: Vec<String>) -> Vec<String> {
+    let send = regex::Regex::new(r"(?i)\b(envoie|envoies|envoyer|écris|ecris|écrire|ecrire|dis|préviens|previens|réponds|reponds)\b.*\b(message|mail|e-mail|email|dm|mp|à|a)\b").unwrap();
+    let follow = regex::Regex::new(r"(?i)^\s*(?:et\s+)?(?:(?:envoie|envoies|envoyer|dis|écris|ecris|mets|réponds|reponds)[-\s]+(?:lui|leur|-lui|-leur)|(?:lui|leur)\s+(?:dire|écrire|ecrire|envoyer)|dire|écrire)\s*(?:que\s+|:\s*)?(.+)$").unwrap();
+    let mut out: Vec<String> = Vec::new();
+    for s in steps {
+        if let Some(prev) = out.last_mut() {
+            if send.is_match(prev) && body_in(prev).is_none() {
+                if let Some(c) = follow.captures(&s) {
+                    let rest = c[1].trim().trim_matches(|ch| ch == '«' || ch == '»' || ch == '"').trim().to_string();
+                    if !rest.is_empty() {
+                        *prev = format!("{prev} : {rest}");
+                        continue;
+                    }
+                }
+            }
+        }
+        out.push(s);
+    }
+    out
+}
+
 pub async fn run(state: &AppState, app: &AppHandle, goal: &str, mode: &str, cancel: &Cancel, channel: &Channel<ControlEvent>) -> Result<(String, usize), String> {
-    let steps = split_steps(goal);
+    let steps = merge_followups(split_steps(goal));
     let mut c = Ctx { state, app, mode, cancel, channel, n: 0 };
     let mut current_app: Option<String> = None;
     for (i, s) in steps.iter().enumerate() {
@@ -1106,6 +1267,15 @@ mod tests {
         assert!(chat_named("envoie un mail à paul").is_none());
         assert_eq!(recipient_in("envoie un message à Tom sur Discord pour dire salut").as_deref(), Some("Tom"));
         assert_eq!(body_in("dis à Léa sur insta que la soirée est annulée").as_deref(), Some("la soirée est annulée"));
+        let m = merge_followups(split_steps("envoie un message a JSKabylie1946 sur Discord et envoie lui salut"));
+        assert_eq!(m.len(), 1, "{m:?}");
+        assert_eq!(body_in(&m[0]).as_deref(), Some("salut"));
+        assert_eq!(recipient_in(&m[0]).as_deref(), Some("JSKabylie1946"));
+        let m = merge_followups(split_steps("ouvre discord et envoie un message à Tom et dis-lui que j'arrive"));
+        assert_eq!(m.len(), 2, "{m:?}");
+        assert_eq!(body_in(&m[1]).as_deref(), Some("j'arrive"));
+        let m = merge_followups(split_steps("écris à Léa sur WhatsApp, envoie-lui « on se voit à 18h »"));
+        assert_eq!(body_in(m.last().unwrap()).as_deref(), Some("on se voit à 18h"));
         assert!(is_mail_request("envoie un mail depuis Outlook") && !is_mail_request("écris à Léa sur Discord"));
         assert_eq!(split_steps("ouvre Outlook et envoie un mail à paul@exemple.fr pour dire bonjour"), vec!["ouvre Outlook", "envoie un mail à paul@exemple.fr pour dire bonjour"]);
     }
