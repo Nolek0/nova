@@ -137,6 +137,7 @@ async function start(page, ctx) {
   paint(page);
   const ch = new Channel();
   ch.onmessage = (ev) => {
+    if (ev.type === 'decided') { const ap = S.steps.find((x) => x.type === 'approval' && x.id === ev.id); if (ap) ap.decided = ev.allow ? 'yes' : 'no'; if (document.body.contains(page)) paint(page); return; }
     if (ev.type === 'status') S.status = ev.text;
     else if (ev.type === 'done' || ev.type === 'error') {
       S.status = '';
@@ -173,6 +174,7 @@ export async function runInline(goal, mount, ctx) {
   } catch (e) { return fail(errorText(e)); }
   const ch = new Channel();
   ch.onmessage = (ev) => {
+    if (ev.type === 'decided') { const ap = st.steps.find((x) => x.type === 'approval' && x.id === ev.id); if (ap) ap.decided = ev.allow ? 'yes' : 'no'; rerender(); return; }
     if (ev.type === 'status') st.status = ev.text;
     else if (ev.type === 'done' || ev.type === 'error') {
       st.status = '';

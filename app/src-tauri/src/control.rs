@@ -374,6 +374,8 @@ pub enum ControlEvent {
     Step { n: usize, thought: String, action: String, result: String, ok: bool },
     Approval { id: String, title: String, detail: String },
     Question { id: String, text: String },
+    /// Décision prise (sur la page ou dans la carte du coin) : la page met à jour la carte.
+    Decided { id: String, allow: bool },
     Done { summary: String, steps: usize },
     Error { message: String },
 }
@@ -505,12 +507,16 @@ pub(crate) async fn ask_approval(app: &AppHandle, channel: &Channel<ControlEvent
             break;
         }
         match tokio::time::timeout(Duration::from_millis(100), &mut rx).await {
-            Ok(Ok(v)) => return v,
+            Ok(Ok(v)) => {
+                let _ = channel.send(ControlEvent::Decided { id: id.clone(), allow: v });
+                return v;
+            }
             Ok(Err(_)) => return false,
             Err(_) => {}
         }
     }
     APPROVALS.lock().unwrap().as_mut().map(|m| m.remove(&id));
+    let _ = channel.send(ControlEvent::Decided { id, allow: false });
     false
 }
 
@@ -783,8 +789,9 @@ pub async fn control_request_permissions(app: AppHandle) -> Result<Value, String
 }
 
 #[tauri::command]
-pub fn control_decide(app: AppHandle, id: String, allow: bool) {
+pub fn control_decide(app: AppHandle, state: State<'_, AppState>, id: String, allow: bool) {
     hide_prompt(&app);
+    state.db.lock().unwrap().log("nova control", if allow { "Accord donné par l'utilisateur" } else { "Refusé par l'utilisateur" }, "confirm", if allow { "autorisé" } else { "refusé" });
     if let Some(tx) = APPROVALS.lock().unwrap().as_mut().and_then(|m| m.remove(&id)) {
         let _ = tx.send(allow);
     }
