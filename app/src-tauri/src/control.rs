@@ -195,6 +195,77 @@ pub(crate) fn move_cursor(app: &AppHandle, x: f64, y: f64, click: bool, label: &
 }
 
 /// La fenêtre de NOVA se retire pendant la tâche pour ne pas recouvrir l'application pilotée.
+/// Carte flottante en bas à droite de l'écran : questions et demandes d'accord sans faire apparaître NOVA.
+fn show_prompt(app: &AppHandle, payload: Value) {
+    const W: f64 = 400.0;
+    const H: f64 = 250.0;
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let win = match handle.get_webview_window("control-ask") {
+            Some(w) => w,
+            None => {
+                let Ok(w) = WebviewWindowBuilder::new(&handle, "control-ask", WebviewUrl::App("ask.html".into()))
+                    .title("Nova Control")
+                    .inner_size(W, H)
+                    .decorations(false)
+                    .transparent(true)
+                    .shadow(false)
+                    .always_on_top(true)
+                    .resizable(false)
+                    .skip_taskbar(true)
+                    .focused(false)
+                    .visible_on_all_workspaces(true)
+                    .visible(false)
+                    .build()
+                else {
+                    return;
+                };
+                w
+            }
+        };
+        if let Ok(ns) = win.ns_window() {
+            unsafe {
+                let ns = ns as *mut AnyObject;
+                // Coin bas-droit de l'écran principal (zone utile, hors Dock).
+                let screen: *mut AnyObject = msg_send![class!(NSScreen), mainScreen];
+                if !screen.is_null() {
+                    let v: Rect = msg_send![screen, visibleFrame];
+                    let _: () = msg_send![ns, setFrame: Rect { x: v.x + v.w - W - 16.0, y: v.y + 16.0, w: W, h: H }, display: true];
+                }
+                let _: () = msg_send![ns, setLevel: 1001isize];
+                let _: () = msg_send![ns, setCollectionBehavior: (1usize << 0) | (1usize << 4) | (1usize << 8)];
+                // Affichée sans prendre le clavier ni faire passer NOVA au premier plan.
+                let _: () = msg_send![ns, orderFrontRegardless];
+            }
+        }
+        let w2 = win.clone();
+        let p = payload.clone();
+        // Laisse la page se charger la première fois avant de lui envoyer la demande.
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(350));
+            let _ = w2.emit_to("control-ask", "ask", p);
+        });
+    });
+}
+
+fn hide_prompt(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("control-ask") {
+        let _ = w.emit_to("control-ask", "ask-close", ());
+        let w = w.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(330));
+            let _ = w.hide();
+        });
+    }
+}
+
+#[tauri::command]
+pub fn control_prompt_hide(app: AppHandle) {
+    if let Some(w) = app.get_webview_window("control-ask") {
+        let _ = w.hide();
+    }
+}
+
 pub(crate) fn hide_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
@@ -334,8 +405,8 @@ async fn complete(state: &AppState, model: &ModelInfo, req: &GenRequest, cancel:
 pub(crate) async fn ask_approval(app: &AppHandle, channel: &Channel<ControlEvent>, title: String, detail: String, cancel: &Cancel) -> bool {
     let id = uuid::Uuid::new_v4().to_string();
     let (tx, rx) = oneshot::channel();
-    // NOVA réapparaît pour que l'utilisateur voie la demande d'accord.
-    show_main(app);
+    // Carte flottante (NOVA ne passe pas au premier plan) ; la page Nova Control l'affiche aussi.
+    show_prompt(app, json!({"id": id, "kind": "approval", "title": title.clone(), "detail": detail.clone()}));
     APPROVALS.lock().unwrap().get_or_insert_with(HashMap::new).insert(id.clone(), tx);
     let _ = channel.send(ControlEvent::Approval { id: id.clone(), title, detail });
     let mut rx = rx;
@@ -359,7 +430,7 @@ pub(crate) async fn ask_question(app: &AppHandle, channel: &Channel<ControlEvent
     let id = uuid::Uuid::new_v4().to_string();
     let (tx, mut rx) = oneshot::channel();
     ANSWERS.lock().unwrap().get_or_insert_with(HashMap::new).insert(id.clone(), tx);
-    show_main(app);
+    show_prompt(app, json!({"id": id, "kind": "question", "title": text.clone(), "detail": ""}));
     let _ = channel.send(ControlEvent::Question { id: id.clone(), text });
     let _ = channel.send(ControlEvent::Status { text: "En attente de ta réponse…".into() });
     for _ in 0..6000 {
@@ -622,14 +693,16 @@ pub async fn control_request_permissions(app: AppHandle) -> Result<Value, String
 }
 
 #[tauri::command]
-pub fn control_decide(id: String, allow: bool) {
+pub fn control_decide(app: AppHandle, id: String, allow: bool) {
+    hide_prompt(&app);
     if let Some(tx) = APPROVALS.lock().unwrap().as_mut().and_then(|m| m.remove(&id)) {
         let _ = tx.send(allow);
     }
 }
 
 #[tauri::command]
-pub fn control_answer(id: String, text: String) {
+pub fn control_answer(app: AppHandle, id: String, text: String) {
+    hide_prompt(&app);
     if let Some(tx) = ANSWERS.lock().unwrap().as_mut().and_then(|m| m.remove(&id)) {
         let _ = tx.send(text);
     }
@@ -664,7 +737,7 @@ pub async fn control_start(state: State<'_, AppState>, app: AppHandle, goal: Str
                 return Err("permissions".to_string());
             }
             show_cursor(&app);
-            hide_main(&app);
+            // NOVA reste où il est : les applications pilotées passent d'elles-mêmes au premier plan.
             // Le temps que les fenêtres du curseur néon soient prêtes (sinon les premiers mouvements sont perdus).
             tokio::time::sleep(Duration::from_millis(1100)).await;
             crate::control_nova::run(&state, &app, &goal, &mode, &cancel, &on_event).await
@@ -672,7 +745,14 @@ pub async fn control_start(state: State<'_, AppState>, app: AppHandle, goal: Str
         .await;
         *CURRENT.lock().unwrap() = None;
         hide_cursor(&app);
-        show_main(&app);
+        // Fin de tâche annoncée dans la carte du coin (elle disparaît seule), sans faire surgir NOVA.
+        let (title, detail) = match &result {
+            Ok((s, _)) => ("Tâche terminée".to_string(), s.clone()),
+            Err(e) if e == "cancelled" => ("Arrêté".to_string(), String::new()),
+            Err(e) if e == "permissions" => ("Autorisations manquantes".to_string(), "Ouvre la page Nova Control dans NOVA.".to_string()),
+            Err(e) => ("Tâche interrompue".to_string(), e.clone()),
+        };
+        show_prompt(&app, json!({"id": "", "kind": "done", "title": title, "detail": detail}));
         send_result(&on_event, result);
         return Ok(());
     }

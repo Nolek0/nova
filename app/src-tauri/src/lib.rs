@@ -864,6 +864,8 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             control::control_answer,
             #[cfg(target_os = "macos")]
+            control::control_prompt_hide,
+            #[cfg(target_os = "macos")]
             control::control_start
         ])
         .build(tauri::generate_context!())

@@ -6,7 +6,8 @@
     "main",
     "quick",
     "island-*",
-    "cursor-*"
+    "cursor-*",
+    "control-ask"
   ],
   "permissions": [
     "core:default",

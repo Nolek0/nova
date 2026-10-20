@@ -14,3 +14,7 @@ nova1/target/
 nova1/data/images/
 nova1/model/*.bak
 nova1/model/vision-train.log
+
+# Corpus Nova Control généré (régénérable : python3 nova1/data/generate_control.py 12)
+nova1/data/control_train.tsv
+nova1/model/control-train.log

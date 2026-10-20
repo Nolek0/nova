@@ -25,3 +25,8 @@ envoyer_mail	envoie un mail à paul@exemple.fr depuis outlook pour lui dire que 
 envoyer_message	envoie un message à Tom sur Discord : on joue ce soir ?	destinataire=Tom;app=Discord;message=on joue ce soir ?
 envoyer_message	écris à maman sur WhatsApp pour lui dire que j'arrive	destinataire=maman;app=WhatsApp;message=j'arrive
 envoyer_message	dis à Léa sur insta que la soirée est annulée	destinataire=Léa;app=insta;message=la soirée est annulée
+envoyer_message	envoie un message à First Pi et envoie salut	destinataire=First Pi;message=salut
+envoyer_message	envoie salut à First Pi sur Discord	destinataire=First Pi;app=Discord;message=salut
+envoyer_message	envoie un message a JSKabylie1946 sur discord : salut	destinataire=JSKabylie1946;app=discord;message=salut
+envoyer_message	dis à xX_Dark_Xx que je joue ce soir	destinataire=xX_Dark_Xx;message=je joue ce soir
+envoyer_message	écris à @lea.m sur insta : tu viens demain ?	destinataire=@lea.m;app=insta;message=tu viens demain ?

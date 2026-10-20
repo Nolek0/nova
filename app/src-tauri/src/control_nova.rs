@@ -7,7 +7,7 @@
 //!    AppleScript), vérifie le résultat et gère seul les erreurs courantes (synonymes de menus,
 //!    raccourci de secours, défilement, applications introuvables, boîtes de dialogue inattendues).
 
-use crate::control::{ask_approval, ask_question, call, hide_main, move_cursor, sensitive_combo, sensitive_label, ControlEvent};
+use crate::control::{ask_approval, ask_question, call, move_cursor, sensitive_combo, sensitive_label, ControlEvent};
 use crate::llm::Cancel;
 use crate::AppState;
 use serde_json::{json, Value};
@@ -248,7 +248,6 @@ impl Ctx<'_> {
             return Ok(true);
         }
         let ok = ask_approval(self.app, self.channel, title.into(), detail.into(), self.cancel).await;
-        hide_main(self.app);
         if self.cancel.is_cancelled() {
             return Err("cancelled".into());
         }
@@ -256,14 +255,14 @@ impl Ctx<'_> {
     }
     async fn ask(&self, q: &str) -> Result<String, String> {
         let a = ask_question(self.app, self.channel, q.into(), self.cancel).await.ok_or("cancelled")?;
-        hide_main(self.app);
         Ok(a)
     }
     async fn focus(&self) {
         let _ = self.call(json!({"cmd": "focus_target"})).await;
     }
     async fn observe(&self) -> Result<Value, String> {
-        self.call(json!({"cmd": "observe", "max_elements": 220})).await
+        // Le cerveau intégré lit l'interface, pas l'image : pas de capture d'écran (bien plus rapide).
+        self.call(json!({"cmd": "observe", "max_elements": 220, "screenshot": false})).await
     }
     async fn pause(&self, ms: u64) {
         tokio::time::sleep(Duration::from_millis(ms)).await;
@@ -292,17 +291,78 @@ fn best_element<'v>(obs: &'v Value, want: &str, roles: &[&str]) -> Option<(&'v V
         .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
 }
 
+/// Empreinte de l'écran : change dès que quelque chose bouge (fenêtre, champ actif, contenu).
+fn signature(obs: &Value) -> String {
+    let mut s = format!("{}|{}|{}|", obs["window"], obs["elements"].as_array().map(|a| a.len()).unwrap_or(0), obs["focused"]);
+    for e in obs["elements"].as_array().into_iter().flatten().take(40) {
+        s.push_str(e["label"].as_str().unwrap_or(""));
+        s.push_str(e["value"].as_str().unwrap_or(""));
+    }
+    for t in obs["texts"].as_array().into_iter().flatten().take(20) {
+        s.push_str(t.as_str().unwrap_or(""));
+    }
+    s
+}
+
+/// Clic vérifié :
+/// 1. AVANT : on demande à macOS ce qu'il y a exactement sous le point visé ; si ce n'est pas le bon
+///    élément (il a bougé, une fenêtre le cache), on le retrouve et on corrige la visée ;
+/// 2. APRÈS : on vérifie que l'écran a réagi ; sinon on reclique autrement (vrai clic de souris).
 async fn press(c: &mut Ctx<'_>, e: &Value, why: &str) -> Result<(), String> {
-    let (x, y) = (e["x"].as_f64().unwrap_or(0.0), e["y"].as_f64().unwrap_or(0.0));
+    let mut e = e.clone();
     let label = e["label"].as_str().unwrap_or("").to_string();
+    let role = e["role"].as_str().unwrap_or("").to_string();
+    let before = c.observe().await.ok().map(|o| signature(&o));
+    // 1. Mini-vérification de la cible.
+    let (x, y) = (e["x"].as_f64().unwrap_or(0.0), e["y"].as_f64().unwrap_or(0.0));
+    let hit = call(c.app, json!({"cmd": "hit", "x": x, "y": y})).await.unwrap_or_default();
+    let labels: Vec<String> = hit["labels"].as_array().into_iter().flatten().filter_map(|l| l.as_str().map(str::to_string)).collect();
+    let on_target = label.is_empty() || labels.is_empty() || labels.iter().any(|l| similarity(&label, l) >= 0.7 || similarity(l, &label) >= 0.7);
+    let mut note = why.to_string();
+    if !on_target {
+        let obs = c.observe().await?;
+        let role_ref = role.as_str();
+        let roles: &[&str] = if role.is_empty() { &[] } else { std::slice::from_ref(&role_ref) };
+        match best_element(&obs, &label, roles) {
+            Some((ne, _)) => {
+                e = ne.clone();
+                note = format!("Sous le curseur il y avait « {} » : j'ai retrouvé « {label} » et corrigé ma visée.", labels.first().cloned().unwrap_or_default());
+            }
+            None => {
+                c.step(&format!("Cliquer sur « {label} »"), &format!("Sous le curseur il y a « {} », pas « {label} ».", labels.first().cloned().unwrap_or_default()), "cible introuvable", false);
+                return Err(format!("« {label} » n'est plus à l'écran."));
+            }
+        }
+    }
+    let (x, y) = (e["x"].as_f64().unwrap_or(0.0), e["y"].as_f64().unwrap_or(0.0));
     glide(c, x, y, &label).await;
     move_cursor(c.app, x, y, true, &label);
     c.focus().await;
-    let r = c.call(json!({"cmd": "press", "element": e["id"]})).await?;
-    c.pause(450).await;
-    let ok = r["error"].is_null();
-    c.step(&format!("Cliquer sur « {label} »"), why, r["error"].as_str().unwrap_or("ok"), ok);
-    if ok { Ok(()) } else { Err(r["error"].as_str().unwrap_or("clic impossible").into()) }
+    let r = call(c.app, json!({"cmd": "press", "element": e["id"]})).await?;
+    c.pause(550).await;
+    // 2. Mini-vérification de l'effet.
+    let changed = match (&before, c.observe().await.ok().map(|o| signature(&o))) {
+        (Some(b), Some(a)) => *b != a,
+        _ => true,
+    };
+    if r["error"].is_null() && changed {
+        c.step(&format!("Cliquer sur « {label} »"), &note, "ok · l'écran a réagi", true);
+        return Ok(());
+    }
+    // Rien n'a bougé (ou l'action a échoué) : vrai clic de souris au centre de l'élément.
+    let _ = c.call(json!({"cmd": "click", "x": x, "y": y})).await?;
+    c.pause(600).await;
+    let changed2 = match (&before, c.observe().await.ok().map(|o| signature(&o))) {
+        (Some(b), Some(a)) => *b != a,
+        _ => true,
+    };
+    c.step(
+        &format!("Cliquer sur « {label} »"),
+        &format!("{note}{}Le premier clic n'a rien changé : j'ai recliqué directement.", if note.is_empty() { "" } else { " " }),
+        if changed2 { "ok · l'écran a réagi" } else { "aucun changement visible" },
+        changed2,
+    );
+    Ok(())
 }
 
 /// Choisit une commande de menu en essayant les synonymes et le libellé le plus proche proposé par l'app.
@@ -750,7 +810,6 @@ async fn send_mail(c: &mut Ctx<'_>, client: &MailClient, why: &str, to: &str, su
         c.allowed(true, &format!("Envoyer un e-mail à {to} avec {name}"), &detail).await?
     } else {
         let ok = crate::control::ask_approval(c.app, c.channel, format!("Envoyer un e-mail à {to} avec {name}"), detail, c.cancel).await;
-        hide_main(c.app);
         ok
     };
     if !ok {
@@ -957,7 +1016,6 @@ async fn send_chat(c: &mut Ctx<'_>, chat: &Chat, who: &str, msg: &str) -> Result
     // Texte non relu : on demande toujours l'accord, même en mode « Tout accepter ».
     let ok = if typed { c.allowed(true, &format!("Envoyer un message à {who} sur {}", chat.app), &detail).await? } else {
         let ok = crate::control::ask_approval(c.app, c.channel, format!("Envoyer un message à {who} sur {}", chat.app), detail, c.cancel).await;
-        hide_main(c.app);
         ok
     };
     if !ok {
@@ -980,6 +1038,18 @@ async fn send_chat(c: &mut Ctx<'_>, chat: &Chat, who: &str, msg: &str) -> Result
 
 /// Contenu d'un message : après « pour lui dire que », « : », « avec le message »… (le plus long trouvé).
 fn body_in(text: &str) -> Option<String> {
+    // « envoie salut à First Pi », « dis bonjour à maman sur WhatsApp » : le message est entre le verbe et « à ».
+    let direct = regex::Regex::new(r"(?i)^\s*(?:nova\s+)?(?:envoie|envoies|envoi|dis|écris|ecris|réponds|reponds|send|tape)\s+(?:«\s*)?(.+?)(?:\s*»)?\s+(?:à|a|to)\s+\S").unwrap();
+    if let Some(c) = direct.captures(text) {
+        let m = c[1].trim().to_string();
+        let f = fold(&m);
+        let generic = ["un message", "un msg", "un mail", "un e-mail", "un email", "un dm", "un mp", "un sms", "un texto", "message", "un petit message", "un mot"];
+        // « écris à Léa : on se voit à 18h » n'est pas cette forme (le texte commence par « à », ou contient « : »).
+        let looks_direct = !f.starts_with("a ") && !f.starts_with("au ") && !m.contains(':') && !f.contains(" sur ");
+        if looks_direct && !generic.contains(&f.as_str()) && !f.starts_with("un message") && !f.starts_with("un mail") && m.chars().count() <= 200 {
+            return Some(m);
+        }
+    }
     let markers = [
         "pour lui dire que ", "pour lui dire ", "pour leur dire que ", "pour dire que ", "pour dire ", "en lui disant que ", "en disant que ", "en disant ",
         "disant que ", "disant ", "avec le message ", "avec le texte ", "le message ", "qui dit ", "dis-lui que ", "dis lui que ", "et dis que ",
@@ -999,13 +1069,15 @@ fn body_in(text: &str) -> Option<String> {
     best
 }
 
-/// Destinataire d'un message : « à Paul », « envoie à maman », « écris à @léa »…
+/// Destinataire d'un message : tout ce qui suit « à / a / pour » jusqu'à « sur », « et », « pour »,
+/// « que », « : »… (« à First Pi et envoie salut » → « First Pi » ; « à JSKabylie1946 sur Discord »).
 fn recipient_in(text: &str) -> Option<String> {
-    let re = regex::Regex::new(r"\b(?i:à|a|pour)\s+(@?[\p{L}\d_.\-]+(?:\s+\p{Lu}[\p{L}\-]+)?)").unwrap();
+    let re = regex::Regex::new(r"(?i)(?:^|\s)(?:à|a|pour)\s+(.+?)(?:\s+(?:sur|via|depuis|avec|et|pour|que|qu'|en|le message|qui|puis|ensuite)\b|\s*[:,;«»\x22]|$)").unwrap();
+    let skip = ["un", "une", "le", "la", "les", "mon", "ma", "mes", "lui", "dire", "partir", "envoyer", "écrire", "ecrire"];
     let found = re
         .captures_iter(text)
-        .map(|c| c[1].trim().to_string())
-        .find(|w| !["un", "une", "le", "la", "les", "mon", "ma", "lui", "dire", "partir"].contains(&fold(w).as_str()) && chat_named(w).is_none());
+        .map(|c| c[1].trim().trim_matches(|ch: char| ch == '.' || ch == '!').to_string())
+        .find(|w| !w.is_empty() && !skip.contains(&fold(w).as_str()) && chat_named(w).is_none() && w.chars().count() <= 40);
     found
 }
 
@@ -1064,15 +1136,23 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
             c.step(&format!("Note « {title} » dans Notes"), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
             *current_app = Some("Notes".into());
         }
-        "envoyer_mail" | "envoyer_message" if !is_mail_request(text) && (p.intent == "envoyer_message" || chat_named(text).is_some()) => {
+        "envoyer_mail" | "envoyer_message" if !is_mail_request(text) => {
             // Messagerie instantanée (Discord, WhatsApp, Instagram…) : celle nommée, sinon celle qu'on vient d'ouvrir.
-            let chat = chat_named(text).or_else(|| current_app.as_deref().and_then(chat_named)).or_else(|| slot("app").as_deref().and_then(chat_named));
+            let remembered = c.state.db.lock().unwrap().setting("lastChatApp");
+            let named = chat_named(text).or_else(|| slot("app").as_deref().and_then(chat_named));
+            let from_context = current_app.as_deref().and_then(chat_named);
+            let chat = named.or(from_context).or_else(|| remembered.as_deref().and_then(chat_named));
+            if named.is_none() {
+                if let Some(ch) = chat {
+                    c.step(&format!("Messagerie : {}", ch.app), if from_context.is_some() { "Tu viens de l'ouvrir : j'envoie le message dedans." } else { "Tu n'as pas précisé de messagerie : je reprends la dernière utilisée." }, "ok", true);
+                }
+            }
             let Some(chat) = chat else {
                 let a = c.ask("Sur quelle messagerie envoyer ce message (Discord, WhatsApp, Messages, Instagram…) ?").await?;
                 let chat = chat_named(&a).ok_or("Messagerie non reconnue.")?;
                 return Box::pin(execute(c, &format!("{text} sur {}", chat.app), current_app)).await;
             };
-            let who = slot("destinataire").filter(|w| !w.contains('@')).or_else(|| recipient_in(text)).map(Ok).unwrap_or_else(|| Err(()));
+            let who = recipient_in(text).or_else(|| slot("destinataire")).filter(|w| !w.contains('.') || w.starts_with('@')).map(Ok).unwrap_or_else(|| Err(()));
             let who = match who {
                 Ok(w) => w,
                 Err(_) => c.ask(&format!("À qui envoyer le message sur {} ?", chat.app)).await?,
@@ -1084,6 +1164,7 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
             };
             c.step(&format!("Message pour {who} sur {}", chat.app), &format!("{} est une messagerie : je vais ouvrir la conversation avec {who}, écrire, vérifier puis envoyer après ton accord.", chat.app), "ok", true);
             send_chat(c, chat, &who, &msg).await?;
+            let _ = c.state.db.lock().unwrap().set_setting("lastChatApp", chat.app);
             *current_app = Some(chat.app.to_string());
         }
         "envoyer_mail" | "envoyer_message" => {
@@ -1194,12 +1275,14 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
 /// on ne redemande jamais ce que l'utilisateur a déjà dit.
 pub fn merge_followups(steps: Vec<String>) -> Vec<String> {
     let send = regex::Regex::new(r"(?i)\b(envoie|envoies|envoyer|écris|ecris|écrire|ecrire|dis|préviens|previens|réponds|reponds)\b.*\b(message|mail|e-mail|email|dm|mp|à|a)\b").unwrap();
-    let follow = regex::Regex::new(r"(?i)^\s*(?:et\s+)?(?:(?:envoie|envoies|envoyer|dis|écris|ecris|mets|réponds|reponds)[-\s]+(?:lui|leur|-lui|-leur)|(?:lui|leur)\s+(?:dire|écrire|ecrire|envoyer)|dire|écrire)\s*(?:que\s+|:\s*)?(.+)$").unwrap();
+    let follow = regex::Regex::new(r"(?i)^\s*(?:et\s+)?(?:(?:envoie|envoies|envoyer|dis|écris|ecris|mets|réponds|reponds|tape)(?:[-\s]+(?:lui|leur))?|(?:lui|leur)\s+(?:dire|écrire|ecrire|envoyer)|dire|écrire)\s+(?:que\s+|:\s*)?(.+)$").unwrap();
     let mut out: Vec<String> = Vec::new();
     for s in steps {
         if let Some(prev) = out.last_mut() {
             if send.is_match(prev) && body_in(prev).is_none() {
-                if let Some(c) = follow.captures(&s) {
+                // « envoie un mail à Paul » juste après n'est pas une suite : c'est une nouvelle demande.
+                let new_request = recipient_in(&s).is_some() || regex::Regex::new(r"(?i)\b(message|mail|e-mail|email|dm)\b").unwrap().is_match(&s);
+                if let (false, Some(c)) = (new_request, follow.captures(&s)) {
                     let rest = c[1].trim().trim_matches(|ch| ch == '«' || ch == '»' || ch == '"').trim().to_string();
                     if !rest.is_empty() {
                         *prev = format!("{prev} : {rest}");
@@ -1217,20 +1300,37 @@ pub async fn run(state: &AppState, app: &AppHandle, goal: &str, mode: &str, canc
     let steps = merge_followups(split_steps(goal));
     let mut c = Ctx { state, app, mode, cancel, channel, n: 0 };
     let mut current_app: Option<String> = None;
+    if steps.len() > 1 {
+        c.status(&format!("{} tâches à enchaîner : {}", steps.len(), steps.join(" → ")));
+    }
+    // Multitâche : chaque tâche est faite à la suite, avec le contexte de la précédente (application
+    // ouverte…). Une tâche qui échoue est signalée, puis on continue avec les suivantes.
+    let mut failed: Vec<String> = Vec::new();
     for (i, s) in steps.iter().enumerate() {
         if cancel.is_cancelled() {
             return Err("cancelled".into());
+        }
+        if steps.len() > 1 {
+            c.step(&format!("Tâche {} sur {} : {s}", i + 1, steps.len()), "", "en cours", true);
         }
         if let Err(e) = execute(&mut c, s, &mut current_app).await {
             if e == "cancelled" {
                 return Err(e);
             }
-            c.step(s, "", &e, false);
-            return Ok((format!("Arrêt à l'étape {} sur {} : {e}", i + 1, steps.len()), c.n));
+            c.step(s, "Je passe à la suite.", &e, false);
+            failed.push(format!("« {s} » : {e}"));
         }
-        c.pause(250).await;
+        c.pause(300).await;
     }
-    Ok((if steps.len() > 1 { format!("Terminé : {} étapes réalisées.", steps.len()) } else { "Terminé.".into() }, c.n))
+    let done = steps.len() - failed.len();
+    let summary = if failed.is_empty() {
+        if steps.len() > 1 { format!("Terminé : les {} tâches sont faites.", steps.len()) } else { "Terminé.".into() }
+    } else if steps.len() == 1 {
+        failed[0].clone()
+    } else {
+        format!("{done} tâche{} sur {} réussie{}. À revoir : {}", if done > 1 { "s" } else { "" }, steps.len(), if done > 1 { "s" } else { "" }, failed.join(" · "))
+    };
+    Ok((summary, c.n))
 }
 
 #[cfg(test)]
@@ -1267,6 +1367,16 @@ mod tests {
         assert!(chat_named("envoie un mail à paul").is_none());
         assert_eq!(recipient_in("envoie un message à Tom sur Discord pour dire salut").as_deref(), Some("Tom"));
         assert_eq!(body_in("dis à Léa sur insta que la soirée est annulée").as_deref(), Some("la soirée est annulée"));
+        let m = merge_followups(split_steps("envoie un message à First Pi et envoie salut"));
+        assert_eq!(m.len(), 1, "{m:?}");
+        assert_eq!(recipient_in(&m[0]).as_deref(), Some("First Pi"));
+        assert_eq!(body_in(&m[0]).as_deref(), Some("salut"));
+        assert_eq!(body_in("envoie salut à First Pi sur Discord").as_deref(), Some("salut"));
+        assert_eq!(recipient_in("envoie salut à First Pi sur Discord").as_deref(), Some("First Pi"));
+        assert_eq!(recipient_in("dis à xX_Dark_Xx que je joue ce soir").as_deref(), Some("xX_Dark_Xx"));
+        assert_eq!(body_in("dis à xX_Dark_Xx que je joue ce soir").as_deref(), Some("je joue ce soir"));
+        let m = merge_followups(split_steps("envoie un message à First Pi et envoie salut puis ouvre Outlook et envoie un mail à paul@exemple.fr pour dire que j'arrive"));
+        assert_eq!(m.len(), 3, "{m:?}");
         let m = merge_followups(split_steps("envoie un message a JSKabylie1946 sur Discord et envoie lui salut"));
         assert_eq!(m.len(), 1, "{m:?}");
         assert_eq!(body_in(&m[0]).as_deref(), Some("salut"));

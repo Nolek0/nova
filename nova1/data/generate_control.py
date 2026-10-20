@@ -132,18 +132,78 @@ def g_envoyer_mail_app(rng, t):
     return G.polite(rng, f), [("destinataire", who), ("app", app), ("message", msg)]
 
 
-def g_envoyer_message(rng, t):
-    who = pick(rng, CHAT_PEOPLE, CHAT_PEOPLE_TEST, t)
-    app = pick(rng, CHAT_APPS, CHAT_APPS_TEST, t)
-    msg = pick(rng, MESSAGES, MESSAGES_TEST, t)
+FIRST = ["Tom", "Léa", "Lucas", "Inès", "Sarah", "Yanis", "Kevin", "Noah", "Camille", "Mamadou", "Ibrahim", "Fatou", "Chloé", "Hugo", "Amine",
+         "Rayan", "Jade", "Louis", "Emma", "Nathan", "Lina", "Adam", "Mehdi", "Aya", "Théo", "Manon", "Enzo", "Zoé", "Karim", "Sofia", "Alex",
+         "First", "Jean", "Marie", "Paul", "Anaïs", "Bilal", "Yasmine", "Moussa", "Clara", "Maxime", "Océane", "Samir", "Elif", "Diego", "Jules"]
+WORDS = ["Pi", "Dark", "Kabylie", "Gamer", "Nova", "Shadow", "Wolf", "King", "Queen", "Pixel", "Ninja", "Frost", "Blaze", "Moon", "Star", "Lion",
+         "Tiger", "Zen", "Neo", "Max", "Fox", "Bear", "Storm", "Ghost", "Kira", "Atlas", "Echo", "Rio", "Volt", "Sky"]
+RELATIVES = ["maman", "papa", "mon frère", "ma sœur", "mon cousin", "ma cousine", "mon prof", "le groupe", "mon pote", "ma meuf", "mon reuf",
+             "mamie", "papi", "mon coach", "la team", "le serveur", "mon chef", "ma voisine"]
+
+
+def fake_who(rng):
+    """Pseudos et noms variés : « First Pi », « JSKabylie1946 », « xX_Dark_Xx », « @lea.m », « Paul Martin »…"""
     r = rng.random()
-    if r < 0.75:
-        f = rng.choice([f"envoie un message à {who} sur {app} : {msg}", f"écris à {who} sur {app} pour lui dire que {msg}", f"dis à {who} sur {app} que {msg}",
-                        f"envoie à {who} sur {app} le message {msg}", f"sur {app}, écris à {who} : {msg}", f"envoie un dm à {who} sur {app} : {msg}",
-                        f"réponds à {who} sur {app} : {msg}", f"message {app} à {who} : {msg}", f"préviens {who} sur {app} que {msg}"])
-        return G.polite(rng, f), [("destinataire", who), ("app", app), ("message", msg)]
-    f = rng.choice([f"envoie un message à {who} sur {app}", f"écris à {who} sur {app}", f"ouvre la conversation avec {who} sur {app}"])
-    return G.polite(rng, f), [("destinataire", who), ("app", app)]
+    if r < 0.18:
+        return rng.choice(FIRST)
+    if r < 0.3:
+        return rng.choice(RELATIVES)
+    if r < 0.45:
+        return f"{rng.choice(FIRST)} {rng.choice(WORDS + [w.upper() for w in WORDS[:5]] + ['Martin', 'Diallo', 'Benali', 'Dupont', 'Nguyen'])}"
+    if r < 0.6:
+        return "".join(rng.choice([str.upper, str.title, str.lower])(x) for x in [rng.choice(FIRST + WORDS)[:rng.randint(2, 6)], rng.choice(WORDS)]) + str(rng.choice([1, 7, 13, 22, 69, 99, 2008, 1946, 2012, 404, ""]))
+    if r < 0.72:
+        a, b = rng.choice(WORDS), rng.choice(WORDS)
+        return rng.choice([f"xX_{a}_Xx", f"{a}_{b}", f"{a.lower()}.{b.lower()}", f"{a}{b}", f"the{a}", f"{a.lower()}_{rng.randint(1, 99)}"])
+    if r < 0.85:
+        return "@" + rng.choice([f"{rng.choice(FIRST).lower()}.{rng.choice('abcdefghijklm')}", f"{rng.choice(FIRST).lower()}_{rng.randint(1, 99)}", rng.choice(WORDS).lower() + rng.choice(WORDS).lower()])
+    return rng.choice(FIRST).lower()
+
+
+GREET = ["salut", "yo", "coucou", "bonjour", "hey", "wesh", "bonsoir", "hello", "slt", "cc", "bjr"]
+MSG_PARTS = ["on se voit à {h}", "tu viens ce soir ?", "je suis en retard", "j'arrive dans {n} minutes", "t'es dispo {d} ?", "on joue ce soir ?",
+             "merci pour {x}", "bien reçu", "je t'appelle {d}", "le match commence à {h}", "rdv devant {p}", "tu peux m'envoyer {x} ?",
+             "c'est validé", "je ne pourrai pas venir {d}", "bon anniversaire", "joyeux anniversaire {who}", "bien joué", "on décale à {d}",
+             "n'oublie pas {x}", "je t'envoie {x} ce soir", "t'as vu le message ?", "réponds-moi stp", "ça marche", "bonne nuit", "à {d}",
+             "la réunion est à {h}", "le rendu est fini", "check tes mails", "appelle-moi quand tu peux", "je suis chez moi", "c'est noté"]
+FILL = {"h": ["18h", "20h30", "midi", "14h", "9h"], "n": ["5", "10", "15", "20"], "d": ["demain", "ce soir", "samedi", "lundi", "tout à l'heure", "la semaine prochaine"],
+        "x": ["hier", "les photos", "le fichier", "les notes", "le lien", "ton aide", "le cadeau", "les clés"], "p": ["la gare", "le ciné", "chez Tom", "l'école"],
+        "who": ["frérot", "ma belle", "champion", "boss"]}
+
+
+def fake_msg(rng, short=False):
+    if short or rng.random() < 0.3:
+        g = rng.choice(GREET)
+        return g if rng.random() < 0.6 else f"{g} {rng.choice(['ça va ?', 'tu fais quoi ?', 'bien ou quoi', 'mon pote', '!'])}"
+    m = rng.choice(MSG_PARTS)
+    for k, v in FILL.items():
+        m = m.replace("{" + k + "}", rng.choice(v))
+    if rng.random() < 0.3:
+        m = f"{rng.choice(GREET)} {m}"
+    return m
+
+
+def g_envoyer_message(rng, t):
+    who = fake_who(rng) if not t else rng.choice(["Noah", "Camille", "Zéphyr 9", "@nina.k", "BigBoss77"])
+    app = pick(rng, CHAT_APPS, CHAT_APPS_TEST, t) if rng.random() < 0.7 else None
+    msg = fake_msg(rng)
+    short = fake_msg(rng, short=True)
+    sur = f" sur {app}" if app else ""
+    slots_app = [("app", app)] if app else []
+    forms = [
+        (f"envoie un message à {who}{sur} : {msg}", msg), (f"envoie un message à {who}{sur} pour lui dire que {msg}", msg),
+        (f"envoie un message à {who}{sur} en disant {msg}", msg), (f"envoie un message à {who}{sur} qui dit {msg}", msg),
+        (f"envoie {short} à {who}{sur}", short), (f"envoie « {short} » à {who}{sur}", short), (f"dis {short} à {who}{sur}", short),
+        (f"dis à {who}{sur} que {msg}", msg), (f"écris à {who}{sur} : {msg}", msg), (f"écris à {who}{sur} {msg}", msg),
+        (f"envoie un message à {who}{sur} : {short}", short), (f"envoie un dm à {who}{sur} : {msg}", msg), (f"réponds {short} à {who}{sur}", short),
+        (f"préviens {who}{sur} que {msg}", msg), (f"envoie à {who}{sur} le message {msg}", msg), (f"envoie un message a {who}{sur} : {short}", short),
+        (f"envoi un msg à {who}{sur} : {msg}", msg), (f"send {short} to {who}{' on ' + app if app else ''}", short),
+        (f"text {who}{' on ' + app if app else ''} : {msg}", msg),
+    ]
+    text, m = rng.choice(forms)
+    if rng.random() < 0.08:
+        return G.polite(rng, f"envoie un message à {who}{sur}"), [("destinataire", who)] + slots_app
+    return G.polite(rng, text), [("destinataire", who)] + slots_app + [("message", m)]
 
 
 def g_enregistrer(rng, t):
@@ -259,7 +319,7 @@ AUTRE = ["qui est le président de la France", "explique-moi la photosynthèse",
          "je n'aime pas Photoshop", "Photoshop est cher ?", "le mail c'est quoi", "merci", "salut", "bonne nuit"]
 GENERATORS["autre"] = lambda rng, t: (rng.choice(AUTRE), [])
 
-COUNTS = {"enregistrer": 2600, "envoyer_mail": 2600, "envoyer_message": 2200, "ouvrir_app": 1800, "menu": 1500, "cliquer": 1500, "ecrire": 1200, "nouvelle_note": 1200,
+COUNTS = {"enregistrer": 2600, "envoyer_mail": 2600, "envoyer_message": 6000, "ouvrir_app": 1800, "menu": 1500, "cliquer": 1500, "ecrire": 1200, "nouvelle_note": 1200,
           "autre": 1600, "recherche_web": 900, "ouvrir_site": 900, "creer_dossier": 900, "fermer_app": 700, "volume": 600}
 DEFAULT = 450
 
@@ -269,6 +329,8 @@ def build(seed, test):
     rows = []
     for intent, gen in GENERATORS.items():
         n = COUNTS.get(intent, DEFAULT)
+        if test:
+            n = min(n, 400)
         if test:
             n = max(60, n // 6)
         for _ in range(n):
@@ -280,6 +342,10 @@ def build(seed, test):
 
 
 if __name__ == "__main__":
+    # Facteur de taille : python3 generate_control.py 12  → environ 12 fois plus de phrases.
+    SCALE = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+    COUNTS = {k: v * SCALE for k, v in COUNTS.items()}
+    DEFAULT = DEFAULT * SCALE
     train, test = build(77, False), build(78, True)
     G.write(os.path.join(HERE, "control_train.tsv"), train)
     G.write(os.path.join(HERE, "control_test.tsv"), test)

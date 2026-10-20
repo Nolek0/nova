@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>Nova Control</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    /* Carte flottante de Nova Control : question ou demande d'accord, sans faire apparaître NOVA. */
+    html, body { background: transparent !important; overflow: hidden; margin: 0; height: 100%; }
+    .ask { position: absolute; inset: 8px; display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px;
+      background: var(--surface); border: 1px solid color-mix(in srgb, var(--cyan) 55%, transparent);
+      box-shadow: 0 0 0 1px rgba(0,0,0,.2), 0 12px 30px rgba(0,0,0,.45), 0 0 18px rgba(34,211,255,.25); font-size: 13px;
+      opacity: 0; transform: translateY(14px); transition: opacity .3s ease, transform .4s cubic-bezier(.2,.9,.25,1.05); }
+    .ask.in { opacity: 1; transform: none; }
+    .ask .head { display: flex; align-items: center; gap: 8px; }
+    .ask .head .mark { width: 18px; height: 18px; flex: none; }
+    .ask .head .mark::before { inset: 2px; }
+    .ask .detail { flex: 1; min-height: 0; overflow: auto; white-space: pre-wrap; font-family: var(--mono); font-size: 11.5px; background: var(--code-bg); border-radius: 8px; padding: 8px 10px; margin: 0; }
+    .ask .row { display: flex; gap: 8px; align-items: center; }
+    .ask input { flex: 1; min-width: 0; }
+  </style>
+</head>
+<body>
+  <div class="ask" id="ask">
+    <div class="head"><span class="mark"></span><b id="title">Nova Control</b></div>
+    <pre class="detail" id="detail"></pre>
+    <div class="row" id="actions"></div>
+  </div>
+  <script type="module">
+    const T = window.__TAURI__;
+    const invoke = (c, a) => T.core.invoke(c, a);
+    const box = document.getElementById('ask');
+    let current = null;
+    const done = (text) => {
+      document.getElementById('actions').innerHTML = `<span class="faint">${text}</span>`;
+      setTimeout(() => { box.classList.remove('in'); setTimeout(() => invoke('control_prompt_hide').catch(() => {}), 320); }, 600);
+    };
+    T.event.listen('ask', (e) => {
+      current = e.payload;
+      document.getElementById('title').textContent = current.kind === 'question' ? `Nova Control demande : ${current.title}` : current.kind === 'done' ? `Nova Control : ${current.title}` : `Autoriser : ${current.title} ?`;
+      const detail = document.getElementById('detail');
+      detail.textContent = current.detail || '';
+      detail.style.display = current.detail ? '' : 'none';
+      const actions = document.getElementById('actions');
+      if (current.kind === 'done') {
+        // Fin de tâche : la carte se retire seule après quelques secondes.
+        actions.innerHTML = '<span style="flex:1"></span><button class="btn small">OK</button>';
+        actions.querySelector('button').onclick = () => done('');
+        clearTimeout(window.__doneTimer);
+        window.__doneTimer = setTimeout(() => done(''), 5000);
+      } else if (current.kind === 'question') {
+        actions.innerHTML = '<input class="field" placeholder="Ta réponse…"><button class="btn primary small">Répondre</button>';
+        const input = actions.querySelector('input');
+        const send = () => { const t = input.value.trim(); if (!t) return; invoke('control_answer', { id: current.id, text: t }); done('Merci, je continue.'); };
+        actions.querySelector('button').onclick = send;
+        input.onkeydown = (ev) => { if (ev.key === 'Enter') send(); };
+        input.addEventListener('mousedown', () => invoke('island_focus').catch(() => {}).then(() => setTimeout(() => input.focus(), 60)));
+      } else {
+        actions.innerHTML = '<button class="btn small" data-no>Refuser</button><span style="flex:1"></span><button class="btn primary small" data-yes tabindex="-1">Autoriser</button>';
+        // « Autoriser » : seulement un vrai clic de souris.
+        actions.querySelector('[data-yes]').onclick = (ev) => { if (ev.detail > 0 && ev.isTrusted) { invoke('control_decide', { id: current.id, allow: true }); done('Autorisé.'); } };
+        actions.querySelector('[data-no]').onclick = () => { invoke('control_decide', { id: current.id, allow: false }); done('Refusé.'); };
+      }
+      requestAnimationFrame(() => requestAnimationFrame(() => box.classList.add('in')));
+    });
+    T.event.listen('ask-close', () => { box.classList.remove('in'); });
+  </script>
+</body>
+</html>

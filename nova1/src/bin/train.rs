@@ -86,7 +86,7 @@ fn main() {
     println!("Paramètres : {}", model.p.count());
     let mut opt = Adam::new(&model.p, 0.004);
     let mut rng = Rng::new(42);
-    let epochs = 12;
+    let epochs: usize = std::env::var("NOVA1_EPOCHS").ok().and_then(|v| v.parse().ok()).unwrap_or(12);
     let started = Instant::now();
     let mut best: Option<(f32, Vec<u8>)> = None;
     for epoch in 1..=epochs {

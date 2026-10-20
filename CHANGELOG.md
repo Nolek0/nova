@@ -2,6 +2,15 @@
 
 All notable changes to NOVA are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.4.5] — 2026-10-20
+
+### Changed
+- **Every click is checked**: before clicking, Nova Control asks macOS what is exactly under the pointer and re-aims if the target moved; after clicking, it checks that the screen reacted, and clicks again another way if not.
+- **No more questions about what you already said**: the Nova Control model was retrained on **371,000 sentences** with all kinds of names and pseudos (“First Pi”, “JSKabylie1946”, “@lea.m”…) and phrasings (“send hi to…”, “send a message to X and send hi”, “tell X that…”); recipient and message are also read with stricter rules. Without an app name, the last messaging app used is reused.
+- **No more pop-ups of the NOVA window**: questions, approvals and the end of a task appear in a small floating card in the bottom-right corner.
+- **Multitasking**: “send a message to First Pi, then go to Outlook and…, then…” runs every task in order with shared context; a failed task is reported and the next ones still run, with a summary at the end.
+- Faster checks (no screenshot when the built-in brain does not need one).
+
 ## [0.4.4] — 2026-10-20
 
 ### Changed

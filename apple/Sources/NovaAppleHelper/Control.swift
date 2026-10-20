@@ -59,6 +59,24 @@ enum ControlSession {
             let ax = AXIsProcessTrustedWithOptions(opts)
             let screen = CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess()
             return ["accessibility": ax, "screen": screen]
+        case "hit":
+            // Ce qui se trouve exactement sous un point de l'écran (élément + ses parents proches),
+            // pour vérifier qu'un clic tombera au bon endroit.
+            let p = CGPoint(x: r["x"] as? Double ?? 0, y: r["y"] as? Double ?? 0)
+            var el: AXUIElement?
+            guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(p.x), Float(p.y), &el) == .success, var cur = el else { return ["labels": [String](), "role": ""] }
+            let role = (attr(cur, kAXRoleAttribute) as? String ?? "").replacingOccurrences(of: "AX", with: "")
+            var labels: [String] = []
+            var pid: pid_t = 0
+            AXUIElementGetPid(cur, &pid)
+            for _ in 0..<4 {
+                let l = label(cur)
+                if !l.isEmpty { labels.append(l) }
+                guard let parent = attr(cur, kAXParentAttribute) else { break }
+                cur = parent as! AXUIElement
+            }
+            let appName = NSRunningApplication(processIdentifier: pid)?.localizedName ?? ""
+            return ["role": role, "labels": labels, "app": appName]
         case "where":
             // Où se passe l'action (sans capture d'écran) : champ actif, sinon fenêtre active, sinon centre de l'écran.
             guard let app = targetApp() else { return ["x": 0, "y": 0] }
@@ -73,7 +91,7 @@ enum ControlSession {
             let m = NSScreen.main?.frame ?? .zero
             return ["x": Int(m.midX), "y": Int(m.height / 2), "kind": "screen"]
         case "observe":
-            return observe(maxElements: r["max_elements"] as? Int ?? 160)
+            return observe(maxElements: r["max_elements"] as? Int ?? 160, shot: r["screenshot"] as? Bool ?? true)
         case "press":
             guard let el = element(r) else { return ["error": "Élément inconnu (refais une observation)."] }
             let err = AXUIElementPerformAction(el, kAXPressAction as CFString)
@@ -232,7 +250,7 @@ enum ControlSession {
         return ""
     }
 
-    static func observe(maxElements: Int) -> [String: Any] {
+    static func observe(maxElements: Int, shot: Bool = true) -> [String: Any] {
         guard AXIsProcessTrusted() else {
             return ["error": "permission", "message": "NOVA n'a pas l'autorisation d'Accessibilité (Réglages Système › Confidentialité et sécurité › Accessibilité)."]
         }
@@ -289,7 +307,7 @@ enum ControlSession {
             res["focused"] = info
         }
         if let wf = windowFrame { res["window_frame"] = [wf.minX, wf.minY, wf.width, wf.height] }
-        if let shot = screenshot(near: windowFrame) { res.merge(shot) { a, _ in a } }
+        if shot, let img = screenshot(near: windowFrame) { res.merge(img) { a, _ in a } }
         return res
     }
 
