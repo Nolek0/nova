@@ -445,7 +445,7 @@ fn describe_observation(obs: &Value) -> String {
 }
 
 /// Extrait le premier objet JSON d'une réponse de modèle (avec ou sans bloc de code).
-fn parse_action(text: &str) -> Option<Value> {
+pub(crate) fn parse_action(text: &str) -> Option<Value> {
     let start = text.find('{')?;
     let mut depth = 0;
     let mut in_str = false;
@@ -471,7 +471,7 @@ fn parse_action(text: &str) -> Option<Value> {
 }
 
 /// Génération complète (non diffusée) avec le modèle choisi.
-async fn complete(state: &AppState, model: &ModelInfo, req: &GenRequest, cancel: &Cancel) -> Result<String, String> {
+pub(crate) async fn complete(state: &AppState, model: &ModelInfo, req: &GenRequest, cancel: &Cancel) -> Result<String, String> {
     let mut text = String::new();
     let on = |c: Chunk| match c {
         Chunk::Text(t) => text.push_str(&t),

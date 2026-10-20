@@ -2,6 +2,17 @@
 
 All notable changes to NOVA are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.4.7] — 2026-10-20
+
+### Added
+- **Real French understanding**: when a chat model is installed (Gemma 4, Qwen, the Apple model…), Nova Control first asks it, on the Mac, to turn the request into precise steps — the application name is separated from the instruction (“open OneNote and structure my notes” → open OneNote, then restructure the open note), recipients, subjects, messages, GIF searches and “the same” are understood from free-form, misspelled French. Without a chat model, the Nova Control model and its rules are used as before.
+- **Transform the open text**: structure, summarise, fix, translate, rephrase the document open in the active app (copy → rewrite by the local model → preview → replace). Replacing always asks for approval, whatever the mode.
+- **GIFs in Discord**: opens the GIF section (found in the interface or by reading the screen), searches, and sends the first result after approval.
+
+### Changed
+- Websites open in a **new tab** instead of replacing the page you had open.
+- “open X and <instruction>” is split correctly even without a chat model.
+
 ## [0.4.6] — 2026-10-20
 
 ### Changed

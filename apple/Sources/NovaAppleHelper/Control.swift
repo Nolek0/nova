@@ -121,6 +121,24 @@ enum ControlSession {
             if focusedIsSecure() { return ["error": "Champ de mot de passe : Nova Control n'y écrit jamais."] }
             typeText(r["text"] as? String ?? "")
             return ["ok": true]
+        case "copy_selection":
+            // Copie la sélection (⌘C) et renvoie son texte ; le presse-papiers de l'utilisateur est remis ensuite.
+            let pb = NSPasteboard.general
+            let saved: [NSPasteboardItem] = (pb.pasteboardItems ?? []).map { item in
+                let copy = NSPasteboardItem()
+                for t in item.types { if let d = item.data(forType: t) { copy.setData(d, forType: t) } }
+                return copy
+            }
+            let before = pb.changeCount
+            _ = pressCombo("cmd+c")
+            var text = ""
+            for _ in 0..<15 {
+                usleep(100_000)
+                if pb.changeCount != before { text = pb.string(forType: .string) ?? ""; break }
+            }
+            pb.clearContents()
+            if !saved.isEmpty { pb.writeObjects(saved) }
+            return ["text": text]
         case "paste":
             // Saisie par collage (⌘V) pour les champs qui ignorent la frappe simulée (barre d'adresse de Chrome…).
             // Le presse-papiers de l'utilisateur est sauvegardé puis remis tel quel.
