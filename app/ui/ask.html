@@ -55,6 +55,8 @@
         actions.querySelector('button').onclick = send;
         input.onkeydown = (ev) => { if (ev.key === 'Enter') send(); };
         input.addEventListener('mousedown', () => invoke('island_focus').catch(() => {}).then(() => setTimeout(() => input.focus(), 60)));
+        setTimeout(() => input.focus(), 120);
+        setTimeout(() => input.focus(), 450);
       } else {
         actions.innerHTML = '<button class="btn small" data-no>Refuser</button><span style="flex:1"></span><button class="btn primary small" data-yes tabindex="-1">Autoriser</button>';
         // « Autoriser » : seulement un vrai clic de souris.
@@ -64,6 +66,14 @@
       requestAnimationFrame(() => requestAnimationFrame(() => box.classList.add('in')));
     });
     T.event.listen('ask-close', () => { box.classList.remove('in'); });
+    // Survol de la carte : elle prend le clavier (le premier clic d'une fenêtre inactive n'arrive pas
+    // toujours jusqu'au champ). Le texte tapé va alors directement dans « Ta réponse ».
+    const grab = () => invoke('island_focus').catch(() => {}).then(() => {
+      const input = document.querySelector('#actions input');
+      if (input) { setTimeout(() => input.focus(), 40); setTimeout(() => input.focus(), 160); }
+    });
+    box.addEventListener('mouseenter', grab);
+    box.addEventListener('mousedown', grab);
   </script>
 </body>
 </html>

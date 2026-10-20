@@ -232,11 +232,15 @@ fn show_prompt(app: &AppHandle, payload: Value) {
                     let v: Rect = msg_send![screen, visibleFrame];
                     let _: () = msg_send![ns, setFrame: Rect { x: v.x + v.w - W - 16.0, y: v.y + 16.0, w: W, h: H }, display: true];
                 }
-                let _: () = msg_send![ns, setLevel: 1001isize];
+                let _: () = msg_send![ns, setLevel: 27isize];
                 let _: () = msg_send![ns, setCollectionBehavior: (1usize << 0) | (1usize << 4) | (1usize << 8)];
                 // Affichée sans prendre le clavier ni faire passer NOVA au premier plan.
                 let _: () = msg_send![ns, orderFrontRegardless];
             }
+        }
+        // Question : la carte prend le clavier tout de suite (le curseur est déjà dans « Ta réponse »).
+        if payload["kind"] == "question" {
+            crate::island::island_focus(win.clone());
         }
         let w2 = win.clone();
         let p = payload.clone();
