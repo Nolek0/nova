@@ -1572,6 +1572,7 @@ mod tests {
         assert_eq!(browser_named("va sur chrom"), Some("Google Chrome"));
         assert_eq!(browser_named("ouvre google chrome"), Some("Google Chrome"));
         assert!(browser_named("ouvre photoshop").is_none());
+        assert_eq!(browser_named("Google Chrome"), Some("Google Chrome"), "nom renvoyé par open_app");
         assert!(is_mail_request("envoie un mail depuis Outlook") && !is_mail_request("écris à Léa sur Discord"));
         assert_eq!(split_steps("ouvre Outlook et envoie un mail à paul@exemple.fr pour dire bonjour"), vec!["ouvre Outlook", "envoie un mail à paul@exemple.fr pour dire bonjour"]);
     }
