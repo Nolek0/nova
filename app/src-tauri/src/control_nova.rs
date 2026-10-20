@@ -247,7 +247,36 @@ impl Ctx<'_> {
                 move_cursor(self.app, x, y, true, &label);
             }
         }
+        if v["cmd"] == "type" {
+            return self.type_checked(v).await;
+        }
         call(self.app, v).await
+    }
+    /// Frappe vérifiée : après avoir tapé, on relit le champ actif. Si le champ est lisible et que le
+    /// texte n'y est pas (certaines apps, comme la barre d'adresse de Chrome, ignorent la frappe simulée),
+    /// on le colle (⌘V, presse-papiers restauré ensuite). Champ illisible : on ne recolle pas (pas de doublon).
+    async fn type_checked(&self, v: Value) -> Result<Value, String> {
+        let text = v["text"].as_str().unwrap_or("").to_string();
+        let r = call(self.app, v).await?;
+        if text.trim().is_empty() || !r["error"].is_null() {
+            return Ok(r);
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        let probe = |o: &Value| -> Option<bool> {
+            let val = o["focused"]["value"].as_str()?;
+            let want: String = fold(&text).chars().take(14).collect();
+            Some(fold(val).contains(want.trim()))
+        };
+        let after = call(self.app, json!({"cmd": "observe", "max_elements": 1, "screenshot": false})).await.unwrap_or_default();
+        if probe(&after) == Some(false) {
+            let p = call(self.app, json!({"cmd": "paste", "text": text})).await?;
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            let again = call(self.app, json!({"cmd": "observe", "max_elements": 1, "screenshot": false})).await.unwrap_or_default();
+            let ok = probe(&again) != Some(false);
+            self.state.db.lock().unwrap().log("nova control", "Frappe ignorée : texte collé à la place", "free", if ok { "réussi" } else { "échec" });
+            return Ok(if ok { json!({"ok": true, "pasted": true}) } else { json!({"error": format!("Le texte « {} » n'arrive pas dans le champ.", text.chars().take(40).collect::<String>())}) }.as_object().map(|m| { let mut m = m.clone(); if !p["error"].is_null() { m.insert("paste_error".into(), p["error"].clone()); } Value::Object(m) }).unwrap());
+        }
+        Ok(r)
     }
     /// Accord de l'utilisateur selon le mode (Auto : actions sensibles ; Manuel : tout ; Tout accepter : jamais).
     async fn allowed(&self, sensitive: bool, title: &str, detail: &str) -> Result<bool, String> {
@@ -493,6 +522,146 @@ async fn open_app(c: &mut Ctx<'_>, name: &str) -> Result<String, String> {
         return Err(format!("Application « {name} » introuvable."));
     }
     Box::pin(open_app(c, &other)).await
+}
+
+/// Profils Chrome (lus dans le fichier local de Chrome) : noms affichés et dernier utilisé.
+fn chrome_profiles() -> (Vec<String>, Option<String>) {
+    let Some(home) = dirs::home_dir() else { return (vec![], None) };
+    let path = home.join("Library/Application Support/Google/Chrome/Local State");
+    let Ok(raw) = std::fs::read_to_string(path) else { return (vec![], None) };
+    let Ok(v) = serde_json::from_str::<Value>(&raw) else { return (vec![], None) };
+    let cache = &v["profile"]["info_cache"];
+    let names: Vec<String> = cache.as_object().map(|m| m.values().filter_map(|p| p["name"].as_str().map(str::to_string)).collect()).unwrap_or_default();
+    let last = v["profile"]["last_used"].as_str().and_then(|dir| cache[dir]["name"].as_str()).map(str::to_string);
+    (names, last)
+}
+
+/// Barre d'adresse du navigateur (Chrome, Safari, Edge, Brave, Firefox…), en français ou en anglais.
+fn address_bar(obs: &Value) -> Option<&Value> {
+    let keys = ["barre d'adresse", "adresse et de recherche", "address and search", "address bar", "rechercher sur google ou saisir", "search google or type",
+                "rechercher ou saisir", "search or enter", "saisissez une adresse", "smart search field", "champ de recherche intelligent"];
+    obs["elements"].as_array()?.iter().find(|e| {
+        TEXT_ROLES.contains(&e["role"].as_str().unwrap_or("")) && {
+            let l = fold(e["label"].as_str().unwrap_or(""));
+            keys.iter().any(|k| l.contains(&fold(k)))
+        }
+    })
+}
+
+/// Page de choix du profil de Chrome (« Qui utilise Chrome ? »).
+fn is_profile_picker(obs: &Value) -> bool {
+    let mut hay = fold(obs["window"].as_str().unwrap_or(""));
+    for t in obs["texts"].as_array().into_iter().flatten().take(40) {
+        hay.push(' ');
+        hay.push_str(&fold(t.as_str().unwrap_or("")));
+    }
+    for e in obs["elements"].as_array().into_iter().flatten().take(80) {
+        hay.push(' ');
+        hay.push_str(&fold(e["label"].as_str().unwrap_or("")));
+    }
+    ["qui utilise chrome", "who's using chrome", "who is using chrome", "choisir un profil", "choose a profile", "ajouter un profil", "add profile"].iter().any(|k| hay.contains(&fold(k)))
+        && address_bar(obs).is_none()
+}
+
+/// Navigateur prêt à recevoir une adresse : si Chrome affiche sa page de profils, on choisit le profil
+/// demandé (« profil Travail »), sinon le dernier utilisé, sinon le premier ; puis on attend la barre d'adresse.
+async fn browser_ready(c: &mut Ctx<'_>, browser: &str, request: &str) -> Result<(), String> {
+    c.status(&format!("J'attends que {browser} soit prêt…"));
+    let obs = wait_for(c, 8000, |o| address_bar(o).is_some() || is_profile_picker(o)).await?;
+    let Some(obs) = obs else {
+        c.step(&format!("{browser} prêt ?"), "Je ne vois ni la barre d'adresse ni la page de profils.", "je continue prudemment", false);
+        return Ok(());
+    };
+    if !is_profile_picker(&obs) {
+        return Ok(());
+    }
+    let (names, last) = if browser.contains("Chrome") { chrome_profiles() } else { (vec![], None) };
+    // Profil nommé dans la demande, sinon le dernier utilisé.
+    let wanted = names.iter().find(|n| fold(request).contains(&fold(n))).cloned().or(last);
+    let skip = ["ajouter", "add", "invite", "guest", "modifier", "edit", "parametres", "settings", "plus", "more", "afficher au demarrage", "show on startup", "fermer", "close"];
+    let candidates: Vec<Value> = obs["elements"].as_array().into_iter().flatten()
+        .filter(|e| ["Button", "Link", "Cell", "Group", "Image"].contains(&e["role"].as_str().unwrap_or("")))
+        .filter(|e| { let l = fold(e["label"].as_str().unwrap_or("")); !l.is_empty() && !skip.iter().any(|k| l.contains(k)) })
+        .cloned()
+        .collect();
+    let pick = wanted
+        .as_ref()
+        .and_then(|w| candidates.iter().map(|e| (e, similarity(w, e["label"].as_str().unwrap_or("")))).filter(|(_, s)| *s >= 0.6).max_by(|a, b| a.1.partial_cmp(&b.1).unwrap()).map(|(e, _)| e.clone()))
+        .or_else(|| candidates.iter().find(|e| names.iter().any(|n| similarity(n, e["label"].as_str().unwrap_or("")) >= 0.6)).cloned())
+        .or_else(|| candidates.first().cloned());
+    let why = match &wanted {
+        Some(w) => format!("Chrome demande quel profil utiliser : je prends « {w} »{}.", if fold(request).contains(&fold(w)) { " (celui que tu as demandé)" } else { " (le dernier utilisé)" }),
+        None => "Chrome demande quel profil utiliser : je prends le premier.".into(),
+    };
+    match pick {
+        Some(e) => press(c, &e, &why).await?,
+        None => {
+            // Lecture de l'écran en dernier recours.
+            let target = wanted.clone().unwrap_or_default();
+            if target.is_empty() || !click_on_screen_text(c, &target).await? {
+                return Err("Chrome affiche sa page de profils et je n'arrive pas à choisir un profil.".into());
+            }
+        }
+    }
+    // Le profil s'ouvre dans une nouvelle fenêtre : on attend sa barre d'adresse.
+    match wait_for(c, 10000, |o| address_bar(o).is_some()).await? {
+        Some(_) => {
+            c.step("Profil Chrome ouvert", "La barre d'adresse est là.", "ok", true);
+            Ok(())
+        }
+        None => Err("Le profil Chrome ne s'est pas ouvert (pas de barre d'adresse).".into()),
+    }
+}
+
+/// Va à une adresse comme un utilisateur : barre d'adresse (⌘L, sinon clic dessus), taper, Entrée,
+/// puis vérifier que la page a bien changé ; un second essai si besoin.
+async fn browse(c: &mut Ctx<'_>, browser: &str, url: &str) -> Result<(), String> {
+    let expect: String = {
+        let host = url.trim_start_matches("https://").trim_start_matches("http://").trim_start_matches("www.");
+        if host.starts_with("google.com/search") {
+            url.split("q=").nth(1).map(|q| urlencoding::decode(q).map(|d| d.into_owned()).unwrap_or_default()).unwrap_or_default().split_whitespace().next().unwrap_or("google").to_string()
+        } else {
+            host.split(['.', '/']).next().unwrap_or(host).to_string()
+        }
+    };
+    for attempt in 0..2 {
+        c.focus().await;
+        let obs = c.observe().await?;
+        if attempt == 0 {
+            c.key("cmd+l").await?;
+        } else if let Some(bar) = address_bar(&obs).cloned() {
+            fill(c, &bar, "", "Barre d'adresse", false).await?;
+            let _ = c.call(json!({"cmd": "key", "combo": "cmd+a"})).await;
+        }
+        c.pause(350).await;
+        let o = c.observe().await?;
+        let in_bar = address_bar(&o).map(|b| {
+            let f = &o["focused"];
+            f["label"] == b["label"] || TEXT_ROLES.contains(&f["role"].as_str().unwrap_or(""))
+        }).unwrap_or(false);
+        if !in_bar && attempt == 0 {
+            c.step("Barre d'adresse", "Le raccourci ⌘L n'a pas placé le curseur dans la barre d'adresse : je clique dedans.", "je réessaie", false);
+            continue;
+        }
+        c.call(json!({"cmd": "type", "text": url})).await?;
+        c.pause(350).await;
+        c.key("return").await?;
+        // La page a-t-elle changé ? (titre de la fenêtre ou adresse affichée)
+        let ok = wait_for(c, 7000, |o| {
+            let title = fold(o["window"].as_str().unwrap_or(""));
+            let addr = address_bar(o).and_then(|b| b["value"].as_str()).map(fold).unwrap_or_default();
+            let e = fold(&expect);
+            !e.is_empty() && (title.contains(&e) || addr.contains(&e))
+        })
+        .await?
+        .is_some();
+        if ok {
+            c.step(&format!("{browser} : {url}"), "J'ai tapé l'adresse dans la barre et vérifié que la page s'est ouverte.", "page ouverte ✓", true);
+            return Ok(());
+        }
+        c.step(&format!("{browser} : {url}"), "La page ne semble pas avoir changé.", if attempt == 0 { "je réessaie" } else { "non confirmé" }, false);
+    }
+    Err(format!("Je n'ai pas pu confirmer l'ouverture de {url} dans {browser}."))
 }
 
 /// Regarde l'écran comme un humain : capture + lecture du texte, et clique sur le libellé voulu.
@@ -1240,7 +1409,11 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
     match intent.as_str() {
         "ouvrir_app" => {
             let name = slot("app").or_else(|| after(text, &["ouvre ", "lance ", "démarre ", "va sur ", "va dans ", "passe sur "])).ok_or("Quelle application ouvrir ?")?;
-            *current_app = Some(open_app(c, &name).await?);
+            let opened = open_app(c, &name).await?;
+            if let Some(b) = browser_named(&opened) {
+                browser_ready(c, b, text).await?;
+            }
+            *current_app = Some(opened);
         }
         "fermer_app" => {
             let name = slot("app").or_else(|| current_app.clone()).ok_or("Quelle application fermer ?")?;
@@ -1275,14 +1448,8 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
                     if current_app.as_deref().map(|a| fold(a) != fold(b)).unwrap_or(true) {
                         *current_app = Some(open_app(c, b).await?);
                     }
-                    c.pause(500).await;
-                    c.key("cmd+l").await?;
-                    c.pause(300).await;
-                    c.call(json!({"cmd": "type", "text": url})).await?;
-                    c.pause(300).await;
-                    c.key("return").await?;
-                    c.step(&format!("{b} : {url}"), "Je tape l'adresse dans la barre du navigateur, comme toi.", "ok", true);
-                    c.pause(1500).await;
+                    browser_ready(c, b, text).await?;
+                    browse(c, b, &url).await?;
                 }
                 None => {
                     let r = c.call(json!({"cmd": "open_url", "url": url})).await?;

@@ -7,6 +7,8 @@ All notable changes to NOVA are listed here. Versions follow [Semantic Versionin
 ### Changed
 - **Finds apps like a person**: Spotlight search on file and displayed (translated) names with typo tolerance, then Spotlight on screen (⌘Space, type, Enter) as a last resort.
 - **Typos** in app names are understood (“outlok”, “discrod”, “chrom”), and the Nova Control model was retrained with more typos.
+- **Chrome profile page**: Nova Control detects “Who's using Chrome?”, picks the profile you named, otherwise the last one used (read locally from Chrome), then waits for the address bar.
+- **Typing is checked everywhere**: after typing, the field is read back; apps that ignore simulated typing (Chrome's address bar…) get the text pasted instead, and the clipboard is restored. Opening a page is confirmed by the window title or the address.
 - **Browsers like a user**: “go to Chrome and search youtube.com” types the address in Chrome's address bar (⌘L) instead of opening Safari in the background; a “search” for something that looks like a website opens the site.
 - **NOVA never comes to the front by itself** anymore (the floating card no longer pulls the main window forward).
 - **Mandatory notch animation** for 3 seconds when Nova Control takes control (not clickable).
