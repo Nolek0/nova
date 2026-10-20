@@ -428,3 +428,14 @@ canvas.plot { width: 100%; height: 340px; display: block; }
 .control-toggle.on { color: var(--cyan); }
 .control-msg { display: block; width: 100%; }
 .control-msg .control-inline { width: min(680px, 100%); }
+
+/* Pop-up de mise à jour (bas à droite, glisse en douceur) */
+.update-pop { position: fixed; right: 18px; bottom: 18px; z-index: 300; width: 340px; display: grid; gap: 10px; padding: 14px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--shadow); font-size: 13px;
+  opacity: 0; transform: translateY(18px) scale(.98); transition: opacity .35s ease, transform .45s cubic-bezier(.2,.9,.25,1.05); }
+.update-pop.in { opacity: 1; transform: none; }
+.update-pop .mark { width: 22px; height: 22px; flex: none; }
+.update-pop .mark::before { inset: 3px; }
+.update-pop .faint { font-size: 12px; }
+.update-pop .up-progress { display: grid; gap: 6px; }
+@media (prefers-reduced-motion: reduce) { .update-pop { transition: none; } }

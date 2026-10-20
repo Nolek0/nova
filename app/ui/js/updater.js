@@ -22,7 +22,7 @@ export async function checkForUpdates(manual = false, { modal } = {}) {
       return;
     }
     pending = update;
-    showUpdate(update, modal);
+    showUpdate(update);
   } catch (e) {
     if (manual) toast(`Impossible de vérifier les mises à jour : ${errorText(e)}`, 'error');
   } finally {
@@ -30,45 +30,49 @@ export async function checkForUpdates(manual = false, { modal } = {}) {
   }
 }
 
-function showUpdate(update, modal) {
-  const notes = (update.body || '').trim();
-  modal(`<div class="row"><span class="mark big"></span><div><h3 style="font-size:17px">Nouvelle version de NOVA</h3>
-      <div class="muted" style="font-size:13px">Version <b>${esc(update.version)}</b> disponible (tu as la ${esc(update.currentVersion)}).</div></div></div>
-    ${notes ? `<div class="card" style="max-height:220px;overflow:auto;font-size:12.5px;white-space:pre-wrap">${esc(notes)}</div>` : ''}
-    <div class="faint">Tes conversations, réglages et modèles sont conservés.</div>
-    <div id="up-progress" class="hidden" style="display:grid;gap:6px"><div class="faint" id="up-label">Téléchargement…</div><div class="progress"><div></div></div></div>
-    <div class="row" style="justify-content:flex-end" id="up-actions"><button class="btn" data-close>Plus tard</button><button class="btn primary" id="up-install">${icon('download')} Installer et redémarrer</button></div>`,
-  (m) => {
-    m.querySelector('#up-install').onclick = async () => {
-      m.querySelector('#up-progress').classList.remove('hidden');
-      m.querySelector('#up-actions').innerHTML = '';
-      let total = 0, done = 0;
-      try {
-        await update.downloadAndInstall((ev) => {
-          if (ev.event === 'Started') total = ev.data.contentLength || 0;
-          if (ev.event === 'Progress') {
-            done += ev.data.chunkLength;
-            m.querySelector('.progress div').style.width = (total ? (100 * done) / total : 0) + '%';
-            m.querySelector('#up-label').textContent = total ? `${(done / 1e6).toFixed(1)} Mo sur ${(total / 1e6).toFixed(1)} Mo` : `${(done / 1e6).toFixed(1)} Mo`;
-          }
-          if (ev.event === 'Finished') m.querySelector('#up-label').textContent = 'Installation…';
-        });
-        m.querySelector('#up-label').textContent = 'Redémarrage de NOVA…';
-        await T.process.relaunch();
-      } catch (e) {
-        m.querySelector('#up-label').textContent = `Échec : ${errorText(e)}`;
-        m.querySelector('#up-actions').innerHTML = '<button class="btn" data-close>Fermer</button>';
-        m.querySelector('[data-close]').onclick = () => m.remove();
-      }
-    };
-  });
+/** Petite carte en bas à droite, qui glisse doucement : « Nouvelle version disponible ». */
+function showUpdate(update) {
+  document.querySelector('.update-pop')?.remove();
+  const pop = el(`<div class="update-pop" role="status">
+    <div class="row"><span class="mark"></span><div class="grow"><b>Nouvelle version de NOVA</b><div class="faint">Version ${esc(update.version)} disponible · tu as la ${esc(update.currentVersion)}</div></div>
+      <button class="icon-btn" data-x title="Plus tard">${icon('x')}</button></div>
+    <div class="up-progress hidden"><div class="faint up-label">Téléchargement…</div><div class="progress"><div></div></div></div>
+    <div class="row up-actions"><button class="btn small" data-later>Plus tard</button><span class="grow"></span><button class="btn small primary" data-install>${icon('download')} Mettre à jour</button></div>
+  </div>`);
+  document.body.appendChild(pop);
+  requestAnimationFrame(() => requestAnimationFrame(() => pop.classList.add('in')));
+  const close = () => { pop.classList.remove('in'); setTimeout(() => pop.remove(), 400); };
+  pop.querySelector('[data-x]').onclick = close;
+  pop.querySelector('[data-later]').onclick = close;
+  pop.querySelector('[data-install]').onclick = async () => {
+    const label = pop.querySelector('.up-label');
+    const bar = pop.querySelector('.progress div');
+    pop.querySelector('.up-progress').classList.remove('hidden');
+    pop.querySelector('.up-actions').classList.add('hidden');
+    pop.querySelector('[data-x]').classList.add('hidden');
+    let total = 0, done = 0;
+    try {
+      await update.downloadAndInstall((ev) => {
+        if (ev.event === 'Started') total = ev.data.contentLength || 0;
+        if (ev.event === 'Progress') {
+          done += ev.data.chunkLength;
+          bar.style.width = (total ? (100 * done) / total : 0) + '%';
+          label.textContent = total ? `${(done / 1e6).toFixed(1)} Mo sur ${(total / 1e6).toFixed(1)} Mo` : `${(done / 1e6).toFixed(1)} Mo`;
+        }
+        if (ev.event === 'Finished') { bar.style.width = '100%'; label.textContent = 'Installation…'; }
+      });
+      label.textContent = 'Redémarrage de NOVA…';
+      await T.process.relaunch();
+    } catch (e) {
+      label.textContent = `Échec : ${errorText(e)}`;
+      pop.querySelector('[data-x]').classList.remove('hidden');
+    }
+  };
 }
 
-/** Vérification automatique : au démarrage puis toutes les 6 heures (désactivable). */
+/** Vérification automatique : une seule fois, au lancement de NOVA (désactivable dans les Paramètres). */
 export function scheduleAutoCheck(state, modal) {
-  const run = () => { if (state.settings.autoUpdate !== '0') checkForUpdates(false, { modal }); };
-  setTimeout(run, 8000);
-  setInterval(run, 6 * 3600 * 1000);
+  setTimeout(() => { if (state.settings.autoUpdate !== '0') checkForUpdates(false, { modal }); }, 3000);
 }
 
 export function updateBadge() {

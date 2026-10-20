@@ -471,6 +471,117 @@ fn email_in(text: &str) -> Option<String> {
     regex::Regex::new(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+").unwrap().find(text).map(|m| m.as_str().to_string())
 }
 
+// ----------------------------------------------------------------------------- Messageries
+
+/// Messagerie connue : comment la reconnaître, comment l'ouvrir et comment envoyer.
+#[derive(Clone)]
+struct MailClient {
+    /// Mots qui la désignent dans une phrase.
+    keys: &'static [&'static str],
+    /// Nom de l'application (ou « web » pour un webmail).
+    app: &'static str,
+    /// Raccourci d'envoi depuis la fenêtre de rédaction.
+    send: &'static str,
+    web: bool,
+}
+
+const MAIL_CLIENTS: &[MailClient] = &[
+    MailClient { keys: &["outlook", "hotmail"], app: "Microsoft Outlook", send: "cmd+return", web: false },
+    MailClient { keys: &["gmail", "google mail"], app: "Gmail", send: "cmd+return", web: true },
+    MailClient { keys: &["apple mail", "mail d'apple", "l'app mail", "application mail", "mail"], app: "Mail", send: "cmd+shift+d", web: false },
+    MailClient { keys: &["spark"], app: "Spark", send: "cmd+return", web: false },
+    MailClient { keys: &["thunderbird"], app: "Thunderbird", send: "cmd+return", web: false },
+    MailClient { keys: &["airmail"], app: "Airmail 5", send: "cmd+return", web: false },
+    MailClient { keys: &["mimestream"], app: "Mimestream", send: "cmd+return", web: false },
+    MailClient { keys: &["canary"], app: "Canary Mail", send: "cmd+return", web: false },
+];
+
+fn apple_mail() -> MailClient {
+    MAIL_CLIENTS.iter().find(|m| m.app == "Mail").cloned().expect("Apple Mail")
+}
+
+fn client_named(name: &str) -> Option<MailClient> {
+    let f = fold(name);
+    MAIL_CLIENTS.iter().find(|m| m.keys.iter().any(|k| f == *k || f.contains(k)) || fold(m.app) == f).cloned()
+}
+
+/// Choisit la messagerie à utiliser, en expliquant pourquoi :
+/// 1. celle nommée dans la phrase (« depuis Outlook », « avec Gmail ») ;
+/// 2. celle qu'on vient d'ouvrir à l'étape précédente (« ouvre Outlook et envoie un mail… ») ;
+/// 3. la messagerie par défaut de macOS ; 4. Apple Mail.
+async fn choose_mail_client(c: &Ctx<'_>, text: &str, app_slot: Option<String>, current: Option<&str>) -> (MailClient, String) {
+    let re = regex::Regex::new(r"(?i)\b(?:depuis|avec|dans|sur|via|par|en utilisant|à partir de)\s+(?:l'app(?:lication)?\s+|le\s+|la\s+|mon\s+|ma\s+)?([\p{L}][\p{L}\s']{1,30})").unwrap();
+    for cap in re.captures_iter(text) {
+        let words = cap[1].trim();
+        // On teste « apple mail », puis « outlook »… sur les premiers mots seulement.
+        let head: String = words.split_whitespace().take(2).collect::<Vec<_>>().join(" ");
+        if let Some(m) = client_named(&head).or_else(|| client_named(words.split_whitespace().next().unwrap_or(""))) {
+            let why = format!("Tu as demandé {} : j'écris le mail dedans.", if m.web { "Gmail".into() } else { m.app.to_string() });
+            return (m, why);
+        }
+    }
+    if let Some(m) = app_slot.as_deref().and_then(client_named) {
+        return (m.clone(), format!("{} est une messagerie : j'écris le mail dedans.", m.app));
+    }
+    if let Some(m) = current.and_then(client_named) {
+        return (m.clone(), format!("{} vient d'être ouvert et c'est une messagerie : j'écris le mail dedans, pas dans une autre app.", m.app));
+    }
+    if let Ok(v) = c.call(json!({"cmd": "default_mail_app"})).await {
+        if let Some(m) = v["app"].as_str().and_then(client_named) {
+            return (m.clone(), format!("{} est ta messagerie par défaut sur ce Mac : je l'utilise.", m.app));
+        }
+    }
+    (apple_mail(), "Aucune messagerie précisée : j'utilise Apple Mail.".into())
+}
+
+/// Écrit le mail dans la messagerie choisie, demande l'accord, puis l'envoie (ou laisse le brouillon).
+async fn send_mail(c: &mut Ctx<'_>, client: &MailClient, why: &str, to: &str, subject: &str, body: &str) -> Result<(), String> {
+    let detail = format!("Avec : {}\nÀ : {to}\nObjet : {subject}\n\n{body}", client.app);
+    // Apple Mail : rédaction et envoi par AppleScript (fiable, sans clic).
+    if client.app == "Mail" {
+        if !c.allowed(true, &format!("Envoyer un e-mail à {to} avec Mail"), &detail).await? {
+            let r = c.call(json!({"cmd": "mail", "to": to, "subject": subject, "body": body, "send": false})).await?;
+            c.step(&format!("Brouillon dans Mail pour {to}"), &format!("{why} Envoi refusé : le brouillon reste ouvert."), r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+            return Ok(());
+        }
+        let r = c.call(json!({"cmd": "mail", "to": to, "subject": subject, "body": body, "send": true})).await?;
+        c.step(&format!("Envoyer un e-mail à {to} avec Mail"), why, r["error"].as_str().unwrap_or("envoyé"), r["error"].is_null());
+        return if r["error"].is_null() { Ok(()) } else { Err(r["error"].as_str().unwrap_or("envoi impossible").into()) };
+    }
+    // Autres messageries : on ouvre une fenêtre de rédaction déjà remplie (lien mailto ou webmail).
+    let enc = |s: &str| urlencoding::encode(s).into_owned();
+    let (url, app) = if client.web {
+        (format!("https://mail.google.com/mail/?view=cm&fs=1&to={}&su={}&body={}", enc(to), enc(subject), enc(body)), None)
+    } else {
+        (format!("mailto:{to}?subject={}&body={}", enc(subject), enc(body)), Some(client.app))
+    };
+    let r = c.call(json!({"cmd": "open_url", "url": url, "app": app})).await?;
+    if !r["error"].is_null() {
+        // Messagerie absente de ce Mac : on retombe sur la messagerie par défaut.
+        c.step(&format!("Ouvrir {}", client.app), why, r["error"].as_str().unwrap_or("échec"), false);
+        let fallback = apple_mail();
+        return Box::pin(send_mail(c, &fallback, &format!("{} n'est pas installé : j'utilise Apple Mail.", client.app), to, subject, body)).await;
+    }
+    c.step(&format!("Rédiger le mail dans {}", if client.web { "Gmail" } else { client.app }), why, "ok", true);
+    c.pause(if client.web { 3500 } else { 1800 }).await;
+    if !c.allowed(true, &format!("Envoyer un e-mail à {to} avec {}", if client.web { "Gmail" } else { client.app }), &detail).await? {
+        c.step("Envoyer le mail", "Envoi refusé : le brouillon reste ouvert pour que tu le relises.", "non envoyé", false);
+        return Ok(());
+    }
+    c.focus().await;
+    c.key(client.send).await?;
+    c.pause(1200).await;
+    // Vérification : si la fenêtre de rédaction est toujours là, on clique sur « Envoyer ».
+    let obs = c.observe().await?;
+    let still = best_element(&obs, "Envoyer", &["Button"]).filter(|(_, s)| *s >= 0.9).map(|(e, _)| e.clone())
+        .or_else(|| best_element(&obs, "Send", &["Button"]).filter(|(_, s)| *s >= 0.9).map(|(e, _)| e.clone()));
+    match still {
+        Some(btn) => press(c, &btn, "Le raccourci n'a pas suffi : je clique sur le bouton d'envoi.").await?,
+        None => c.step(&format!("Envoyer le mail à {to}"), &format!("Raccourci d'envoi de {} ({}).", if client.web { "Gmail" } else { client.app }, client.send), "envoyé", true),
+    }
+    Ok(())
+}
+
 /// Exécute une étape comprise par le modèle. Renvoie l'application concernée (pour les étapes suivantes).
 async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) -> Result<(), String> {
     let p = model().ok_or("Modèle Nova Control indisponible.")?.predict(text);
@@ -482,7 +593,7 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
     c.status(&format!("« {text} » → {}", p.intent.replace('_', " ")));
     // « dans Photoshop, … » : on passe d'abord sur la bonne application.
     if let Some(a) = slot("app") {
-        if p.intent != "ouvrir_app" && p.intent != "fermer_app" && current_app.as_deref().map(|c| fold(c) != fold(&a)).unwrap_or(true) {
+        if p.intent != "ouvrir_app" && p.intent != "fermer_app" && p.intent != "envoyer_mail" && current_app.as_deref().map(|c| fold(c) != fold(&a)).unwrap_or(true) {
             *current_app = Some(open_app(c, &a).await?);
         }
     }
@@ -536,15 +647,9 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
                 let mut ch = s.chars();
                 ch.next().map(|f| f.to_uppercase().collect::<String>() + ch.as_str()).unwrap_or_default()
             });
-            let detail = format!("À : {to}\nObjet : {subject}\n\n{body}");
-            if !c.allowed(true, &format!("Envoyer un e-mail à {to}"), &detail).await? {
-                // Refus : on prépare le brouillon sans l'envoyer.
-                let r = c.call(json!({"cmd": "mail", "to": to, "subject": subject, "body": body, "send": false})).await?;
-                c.step(&format!("Brouillon de mail pour {to}"), "Envoi refusé : je laisse le brouillon ouvert dans Mail.", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
-                return Ok(());
-            }
-            let r = c.call(json!({"cmd": "mail", "to": to, "subject": subject, "body": body, "send": true})).await?;
-            c.step(&format!("Envoyer un e-mail à {to}"), "", r["error"].as_str().unwrap_or("envoyé"), r["error"].is_null());
+            let (client, why) = choose_mail_client(c, text, slot("app"), current_app.as_deref()).await;
+            send_mail(c, &client, &why, &to, &subject, &body).await?;
+            *current_app = Some(client.app.to_string());
         }
         "enregistrer" => {
             let fmt = slot("format").map(|f| f.to_uppercase().replace("JPG", "JPEG"));
@@ -673,5 +778,11 @@ mod tests {
         assert_eq!(email_in("à paul@exemple.fr pour"), Some("paul@exemple.fr".into()));
         assert!(similarity("Enregistrer sous", "Enregistrer sous…") > 0.85);
         assert!(synonyms("Fichier").contains(&"File".to_string()));
+        assert_eq!(client_named("Microsoft Outlook").unwrap().app, "Microsoft Outlook");
+        assert_eq!(client_named("outlook").unwrap().app, "Microsoft Outlook");
+        assert!(client_named("Photoshop").is_none());
+        assert_eq!(client_named("gmail").unwrap().app, "Gmail");
+        assert_eq!(client_named("Mail").unwrap().app, "Mail");
+        assert_eq!(split_steps("ouvre Outlook et envoie un mail à paul@exemple.fr pour dire bonjour"), vec!["ouvre Outlook", "envoie un mail à paul@exemple.fr pour dire bonjour"]);
     }
 }

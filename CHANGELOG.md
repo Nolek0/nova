@@ -2,6 +2,15 @@
 
 All notable changes to NOVA are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.4.2] — 2026-10-20
+
+### Added
+- Nova Control picks the right e-mail app and explains why: the one named in the request (“from Outlook”, “with Gmail”), the one just opened (“open Outlook and send an e-mail…”), the Mac's default mail app, then Apple Mail. Outlook, Spark, Thunderbird, Airmail, Mimestream, Canary and Gmail (web) write the e-mail in their own window; sending still needs your approval.
+- Update notice: a small card slides in at the bottom right when NOVA starts and a new version is available, with the download progress inside it.
+
+### Changed
+- Automatic update checks happen only when NOVA starts (no more checks every 6 hours).
+
 ## [0.4.1] — 2026-10-20
 
 ### Added

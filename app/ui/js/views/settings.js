@@ -174,7 +174,7 @@ export function render(v, ctx) {
   };
 
   // Mises à jour
-  const up = group('Mises à jour', 'download', `<div class="row"><span style="width:150px">Version installée</span><b id="ver">…</b></div><label class="row"><input type="checkbox" id="auto"> Rechercher automatiquement les mises à jour</label><div class="row"><button class="btn" id="checknow">${icon('refresh')} Rechercher maintenant</button><button class="btn" id="releases">${icon('external')} Notes de version (GitHub)</button></div><div class="faint">Les nouvelles versions sont publiées sur GitHub et signées : NOVA vérifie la signature avant d'installer. Tes données sont conservées.</div>`);
+  const up = group('Mises à jour', 'download', `<div class="row"><span style="width:150px">Version installée</span><b id="ver">…</b></div><label class="row"><input type="checkbox" id="auto"> Rechercher les mises à jour au lancement de NOVA</label><div class="row"><button class="btn" id="checknow">${icon('refresh')} Rechercher maintenant</button><button class="btn" id="releases">${icon('external')} Notes de version (GitHub)</button></div><div class="faint">Les nouvelles versions sont publiées sur GitHub et signées : NOVA vérifie la signature avant d'installer. Tes données sont conservées.</div>`);
   ctx.currentVersion().then((v) => (up.querySelector('#ver').textContent = v));
   const auto = up.querySelector('#auto');
   auto.checked = s.autoUpdate !== '0';

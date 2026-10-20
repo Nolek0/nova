@@ -523,4 +523,5 @@ export default {
  "Pour une conversation libre, des explications ou du code, utilise un modèle de conversation ci-dessous (Gemma 4…).": "Kwa mazungumzo huru, maelezo au msimbo, tumia modeli ya mazungumzo hapa chini (Gemma 4…).",
  "Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi": "Majibu ya papo hapo ya Nova 1 kwa maombi rahisi (salamu, saa, tarehe, kete, vichekesho), bila kujali modeli",
  "Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.": "Michoro (“chora paka”) hufanywa na Nova 1 kila mara. Ikizimwa, maombi madogo huenda kwa modeli iliyochaguliwa.",
+ "Rechercher les mises à jour au lancement de NOVA": "Tafuta masasisho NOVA inapoanza",
 };

@@ -523,4 +523,5 @@ export default {
  "Pour une conversation libre, des explications ou du code, utilise un modèle de conversation ci-dessous (Gemma 4…).": "Mpo na lisolo ya bonsomi, ndimbola to kode, salelá modèle ya lisolo awa na nse (Gemma 4…).",
  "Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi": "Biyano ya noki ya Nova 1 mpo na mituna ya pete (mbote, ngonga, mokolo, dé, masapo), ata modèle nini",
  "Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.": "Bililingi (« salá motoko ») esalemaka ntango nyonso na Nova 1. Soki ekangami, mituna ya mike ekendaka na modèle oyo oponi.",
+ "Rechercher les mises à jour au lancement de NOVA": "Luka ba mise à jour ntango NOVA ebandi",
 };

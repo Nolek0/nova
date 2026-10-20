@@ -523,4 +523,5 @@ export default {
  "Pour une conversation libre, des explications ou du code, utilise un modèle de conversation ci-dessous (Gemma 4…).": "Per conversazioni libere, spiegazioni o codice, usa un modello di conversazione qui sotto (Gemma 4…).",
  "Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi": "Risposte istantanee di Nova 1 per richieste semplici (saluti, ora, data, dado, barzellette), qualunque sia il modello",
  "Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.": "I disegni («disegna un gatto») li fa sempre Nova 1. Disattivato: le piccole richieste passano dal modello scelto.",
+ "Rechercher les mises à jour au lancement de NOVA": "Cerca aggiornamenti all'avvio di NOVA",
 };

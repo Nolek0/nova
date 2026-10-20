@@ -110,9 +110,23 @@ enum ControlSession {
         case "open_app", "focus_app":
             return openApp(r["name"] as? String ?? "")
         case "open_url":
-            guard let u = URL(string: r["url"] as? String ?? ""), ["http", "https"].contains(u.scheme ?? "") else { return ["error": "Adresse invalide."] }
-            NSWorkspace.shared.open(u)
+            // http(s) ou mailto ; « app » : application précise (ex. « Microsoft Outlook » pour un mailto).
+            guard let raw = r["url"] as? String, let u = URL(string: raw), ["http", "https", "mailto"].contains(u.scheme ?? "") else { return ["error": "Adresse invalide."] }
+            if let app = r["app"] as? String, !app.isEmpty {
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                p.arguments = ["-a", app, raw]
+                try? p.run()
+                p.waitUntilExit()
+                if p.terminationStatus != 0 { return ["error": "Impossible d'ouvrir avec « \(app) »."] }
+            } else {
+                NSWorkspace.shared.open(u)
+            }
             return ["ok": true]
+        case "default_mail_app":
+            // Messagerie choisie par l'utilisateur dans macOS (celle qui ouvre les liens mailto).
+            guard let u = URL(string: "mailto:test@example.com"), let app = NSWorkspace.shared.urlForApplication(toOpen: u) else { return ["app": "Mail"] }
+            return ["app": app.deletingPathExtension().lastPathComponent]
         case "note":
             let title = r["title"] as? String ?? "", body = r["body"] as? String ?? ""
             let html = "<div><h1>\(escapeHTML(title))</h1></div>" + body.split(separator: "\n", omittingEmptySubsequences: false).map { "<div>\(escapeHTML(String($0)))</div>" }.joined()

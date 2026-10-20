@@ -523,4 +523,5 @@ export default {
  "Pour une conversation libre, des explications ou du code, utilise un modèle de conversation ci-dessous (Gemma 4…).": "Pou yon konvèsasyon lib, eksplikasyon oswa kòd, itilize yon modèl konvèsasyon anba a (Gemma 4…).",
  "Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi": "Repons enstantane Nova 1 pou demann senp (bonjou, lè, dat, de, blag), kèlkeswa modèl la",
  "Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.": "Desen yo (« desine yon chat ») toujou fèt pa Nova 1. Lè l etenn, ti demann yo ale nan modèl ou chwazi a.",
+ "Rechercher les mises à jour au lancement de NOVA": "Chèche mizajou lè NOVA ap demare",
 };
