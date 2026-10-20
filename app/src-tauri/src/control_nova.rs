@@ -108,6 +108,15 @@ pub fn split_steps(goal: &str) -> Vec<String> {
     for sep in seps {
         steps = steps.into_iter().flat_map(|s| s.split(sep).map(str::to_string).collect::<Vec<_>>()).collect();
     }
+    // « … et le même sur Discord à X » : une nouvelle tâche qui reprend le message précédent.
+    let same = regex::Regex::new(r"(?i),?\s+(?:et\s+)?(?:fais\s+|envoie\s+|refais\s+)?(?:le\s+m[êe]me|la\s+m[êe]me\s+chose|pareil|idem)\b").unwrap();
+    steps = steps
+        .into_iter()
+        .flat_map(|s| match same.find(&s) {
+            Some(m) if m.start() > 0 => vec![s[..m.start()].to_string(), s[m.start()..].trim().trim_start_matches(',').trim().to_string()],
+            _ => vec![s],
+        })
+        .collect();
     let verb_list: Vec<&str> = verbs.split('|').collect();
     let mut out = Vec::new();
     for s in steps {
@@ -205,6 +214,9 @@ struct Ctx<'a> {
     cancel: &'a Cancel,
     channel: &'a Channel<ControlEvent>,
     n: usize,
+    /// Dernier message envoyé (pour « et le même sur Discord à X »).
+    last_subject: Option<String>,
+    last_message: Option<String>,
 }
 
 impl Ctx<'_> {
@@ -432,32 +444,80 @@ async fn click_label(c: &mut Ctx<'_>, label: &str) -> Result<(), String> {
         }
         c.pause(250).await;
     }
-    Err(format!("Je ne trouve pas « {label} » à l'écran."))
+    // Dernier recours : lire l'écran lui-même (comme une personne qui regarde).
+    if click_on_screen_text(c, label).await? {
+        return Ok(());
+    }
+    Err(format!("Je ne trouve pas « {label} » à l'écran, même en le lisant."))
 }
 
 async fn open_app(c: &mut Ctx<'_>, name: &str) -> Result<String, String> {
+    // Noms connus écrits avec une faute : on corrige d'abord (« outlok » → Outlook, « chrom » → Chrome).
+    let fixed = client_named(name).filter(|m| !m.web).map(|m| m.app.to_string())
+        .or_else(|| chat_named(name).filter(|ch| ch.url.is_none()).map(|ch| ch.app.to_string()))
+        .or_else(|| browser_named(name).map(str::to_string));
+    let name = fixed.as_deref().filter(|f| fold(f) != fold(name)).unwrap_or(name).to_string();
     let r = c.call(json!({"cmd": "open_app", "name": name})).await?;
     if r["error"].is_null() {
-        let real = r["app"].as_str().unwrap_or(name).to_string();
+        let real = r["app"].as_str().unwrap_or(&name).to_string();
         c.step(&format!("Ouvrir {real}"), "", "ok", true);
-        c.pause(500).await;
+        c.pause(600).await;
         return Ok(real);
     }
-    // Nom approximatif : on cherche parmi les applications installées.
+    // Recherche Spotlight (noms affichés, traductions, fautes de frappe).
     let found = c.call(json!({"cmd": "find_app", "name": name})).await?;
     if let Some(best) = found["apps"].as_array().and_then(|a| a.first()).and_then(|v| v.as_str()) {
         let r2 = c.call(json!({"cmd": "open_app", "name": best})).await?;
         if r2["error"].is_null() {
-            c.step(&format!("Ouvrir {best}"), &format!("« {name} » n'existe pas tel quel : j'ai trouvé « {best} »."), "ok", true);
-            c.pause(500).await;
+            c.step(&format!("Ouvrir {best}"), &format!("Spotlight a trouvé « {best} » pour « {name} »."), "ok", true);
+            c.pause(600).await;
             return Ok(best.to_string());
         }
     }
-    let other = c.ask(&format!("Je ne trouve pas l'application « {name} » sur ce Mac. Quel est son nom exact ? (ou « annuler »)")).await?;
+    // Comme un utilisateur : ⌘Espace, taper le nom, Entrée.
+    c.key("cmd+space").await?;
+    c.pause(700).await;
+    c.call(json!({"cmd": "type", "text": name})).await?;
+    c.pause(1300).await;
+    c.key("return").await?;
+    c.pause(1800).await;
+    let front = c.call(json!({"cmd": "focus_target"})).await.unwrap_or_default();
+    let front_name = front["app"].as_str().unwrap_or("").to_string();
+    if !front_name.is_empty() && (similarity(&name, &front_name) >= 0.6 || fold(&front_name).contains(&fold(&name))) {
+        c.step(&format!("Ouvrir {front_name} (Spotlight)"), "Je l'ai cherchée dans Spotlight, comme tu le ferais.", "ok", true);
+        return Ok(front_name);
+    }
+    let _ = c.call(json!({"cmd": "key", "combo": "escape"})).await;
+    let other = c.ask(&format!("Je ne trouve pas l'application « {name} », même avec Spotlight. Quel est son nom exact ? (ou « annuler »)")).await?;
     if fold(&other).starts_with("annul") {
         return Err(format!("Application « {name} » introuvable."));
     }
     Box::pin(open_app(c, &other)).await
+}
+
+/// Regarde l'écran comme un humain : capture + lecture du texte, et clique sur le libellé voulu.
+/// Utilisé quand la liste des éléments de l'application ne suffit pas.
+async fn click_on_screen_text(c: &mut Ctx<'_>, label: &str) -> Result<bool, String> {
+    c.status(&format!("Je regarde l'écran pour trouver « {label} »…"));
+    let r = c.call(json!({"cmd": "read_screen"})).await?;
+    let best = r["lines"].as_array().and_then(|a| {
+        a.iter()
+            .map(|l| (l, similarity(label, l["text"].as_str().unwrap_or(""))))
+            .filter(|(_, s)| *s >= 0.75)
+            .max_by(|x, y| x.1.partial_cmp(&y.1).unwrap())
+            .map(|(l, _)| l.clone())
+    });
+    let Some(line) = best else { return Ok(false) };
+    let (x, y) = (line["x"].as_f64().unwrap_or(0.0), line["y"].as_f64().unwrap_or(0.0));
+    let before = c.observe().await.ok().map(|o| signature(&o));
+    c.call(json!({"cmd": "click", "x": x, "y": y})).await?;
+    c.pause(600).await;
+    let changed = match (before, c.observe().await.ok().map(|o| signature(&o))) {
+        (Some(b), Some(a)) => b != a,
+        _ => true,
+    };
+    c.step(&format!("Cliquer sur « {} »", line["text"].as_str().unwrap_or(label)), "Je l'ai trouvé en lisant l'écran (capture + reconnaissance du texte).", if changed { "ok · l'écran a réagi" } else { "aucun changement visible" }, changed);
+    Ok(true)
 }
 
 /// Enregistrer / exporter avec la boîte de dialogue standard : nom, format, dossier, puis validation.
@@ -596,7 +656,24 @@ fn apple_mail() -> MailClient {
 
 fn client_named(name: &str) -> Option<MailClient> {
     let f = fold(name);
-    MAIL_CLIENTS.iter().find(|m| m.keys.iter().any(|k| f == *k || f.contains(k)) || fold(m.app) == f).cloned()
+    MAIL_CLIENTS
+        .iter()
+        .find(|m| m.keys.iter().any(|k| f == *k || f.contains(k)) || fold(m.app) == f)
+        .or_else(|| MAIL_CLIENTS.iter().find(|m| m.keys.iter().any(|k| !k.contains(' ') && k.len() >= 5 && words_of(&f).iter().any(|w| close(w, k)))))
+        .cloned()
+}
+
+fn words_of(f: &str) -> Vec<String> {
+    f.split(|ch: char| !ch.is_alphanumeric()).filter(|w| !w.is_empty()).map(str::to_string).collect()
+}
+
+/// Mot à une ou deux fautes de frappe près (« outlok », « discrod », « chrom »).
+fn close(word: &str, key: &str) -> bool {
+    if word.len() < 4 {
+        return false;
+    }
+    let d = levenshtein(word, key);
+    d <= if key.len() >= 7 { 2 } else { 1 }
 }
 
 /// Choisit la messagerie à utiliser, en expliquant pourquoi :
@@ -861,7 +938,60 @@ const CHATS: &[Chat] = &[
 
 fn chat_named(text: &str) -> Option<&'static Chat> {
     let f = fold(text);
-    CHATS.iter().find(|c| c.keys.iter().any(|k| f.split(|ch: char| !ch.is_alphanumeric()).any(|w| w == *k) || (k.contains(' ') && f.contains(k))))
+    let words = words_of(&f);
+    CHATS
+        .iter()
+        .find(|c| c.keys.iter().any(|k| words.iter().any(|w| w == k) || (k.contains(' ') && f.contains(k))))
+        .or_else(|| CHATS.iter().find(|c| c.keys.iter().any(|k| !k.contains(' ') && k.len() >= 5 && words.iter().any(|w| close(w, k)))))
+}
+
+/// Navigateurs connus (avec fautes tolérées) : nom de l'application à ouvrir.
+const BROWSERS: &[(&[&str], &str)] = &[
+    (&["chrome", "google chrome"], "Google Chrome"), (&["safari"], "Safari"), (&["firefox"], "Firefox"), (&["edge"], "Microsoft Edge"),
+    (&["brave"], "Brave Browser"), (&["arc"], "Arc"), (&["opera"], "Opera"), (&["vivaldi"], "Vivaldi"),
+];
+
+fn browser_named(text: &str) -> Option<&'static str> {
+    let f = fold(text);
+    let words = words_of(&f);
+    BROWSERS
+        .iter()
+        .find(|(keys, app)| keys.iter().any(|k| words.iter().any(|w| w == k) || (k.contains(' ') && f.contains(k))) || fold(app) == f)
+        .or_else(|| BROWSERS.iter().find(|(keys, _)| keys.iter().any(|k| !k.contains(' ') && k.len() >= 5 && words.iter().any(|w| close(w, k)))))
+        .map(|(_, app)| *app)
+}
+
+/// Champs explicites d'un message : « objet salut », « avec l'objet … », « message coucou »,
+/// « contenu : … ». On prend la DERNIÈRE mention de « message » (« envoie un message sur Outlook…
+/// et message coucou » → « coucou »).
+fn fields_in(text: &str) -> (Option<String>, Option<String>) {
+    let stop = r"(?:\s*,|\s+et\s+(?:le\s+|la\s+|pour\s+)?(?:message|contenu|texte|corps|objet|sujet|m[êe]me)\b|\s+(?:avec\s+)?(?:le\s+)?(?:message|contenu|texte)\s|\s+puis\b|\s+ensuite\b|\s*$)";
+    let subject = regex::Regex::new(&format!(r#"(?i)\b(?:objet|sujet)\s*(?:est|:|=)?\s*[«"“]?\s*(.+?)\s*[»"”]?{stop}"#)).unwrap();
+    let subj = subject.captures(text).map(|c| c[1].trim().to_string()).filter(|s| !s.is_empty());
+    let kw = regex::Regex::new(r"(?i)\b(?:message|contenu|texte|corps)\b").unwrap();
+    let mut msg = None;
+    for m in kw.find_iter(text) {
+        let rest = text[m.end()..].trim_start();
+        // « un message sur Outlook à X » : ce n'est pas le contenu.
+        let rf = fold(rest);
+        if ["sur ", "a ", "à ", "au ", "pour ", "via ", "depuis ", "de "].iter().any(|p| rf.starts_with(p)) || rest.is_empty() {
+            continue;
+        }
+        let rest = rest.trim_start_matches(|c: char| c == ':' || c == '=').trim();
+        let rest = rest.strip_prefix("est ").unwrap_or(rest).trim();
+        let cut = regex::Regex::new(r"(?i)(?:\s*,?\s+(?:et\s+)?(?:le\s+m[êe]me|la\s+m[êe]me\s+chose|pareil|idem)\b|\s+puis\b|\s+ensuite\b)").unwrap();
+        let end = cut.find(rest).map(|c| c.start()).unwrap_or(rest.len());
+        let v = rest[..end].trim().trim_matches(|c| c == '«' || c == '»' || c == '"' || c == '“' || c == '”').trim().to_string();
+        if !v.is_empty() {
+            msg = Some(v);
+        }
+    }
+    (subj, msg)
+}
+
+/// « le même », « pareil », « la même chose », « idem » : reprendre le message précédent.
+fn is_same_ref(text: &str) -> bool {
+    regex::Regex::new(r"(?i)^\s*(?:et\s+)?(?:fais\s+|envoie\s+|refais\s+)?(?:le\s+m[êe]me|la\s+m[êe]me\s+chose|pareil|idem)\b").unwrap().is_match(text)
 }
 
 /// Preuve que la conversation ouverte est bien celle de `who` : titre de la fenêtre, champ de saisie
@@ -1101,7 +1231,13 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
             *current_app = Some(open_app(c, &a).await?);
         }
     }
-    match p.intent.as_str() {
+    // « le même sur Discord à X » : c'est un envoi, quel que soit l'avis du modèle.
+    let intent = if is_same_ref(text) && (c.last_message.is_some()) {
+        if is_mail_request(text) || email_in(text).is_some() { "envoyer_mail".to_string() } else { "envoyer_message".to_string() }
+    } else {
+        p.intent.clone()
+    };
+    match intent.as_str() {
         "ouvrir_app" => {
             let name = slot("app").or_else(|| after(text, &["ouvre ", "lance ", "démarre ", "va sur ", "va dans ", "passe sur "])).ok_or("Quelle application ouvrir ?")?;
             *current_app = Some(open_app(c, &name).await?);
@@ -1123,10 +1259,36 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
                 if s.starts_with("http") { s } else if s.contains('.') { format!("https://{s}") } else { format!("https://www.{}.com", fold(&s).replace(' ', "")) }
             } else {
                 let q = slot("requete").or_else(|| after(text, &["cherche ", "recherche ", "google "])).unwrap_or_else(|| text.into());
-                format!("https://www.google.com/search?q={}", urlencoding::encode(&q))
+                let q = q.trim().trim_matches(|c| c == '«' || c == '»' || c == '"').trim().to_string();
+                // « recherche youtube.com » : c'est un site, on y va directement.
+                if !q.contains(' ') && q.contains('.') && !q.ends_with('.') {
+                    if q.starts_with("http") { q } else { format!("https://{q}") }
+                } else {
+                    format!("https://www.google.com/search?q={}", urlencoding::encode(&q))
+                }
             };
-            let r = c.call(json!({"cmd": "open_url", "url": url})).await?;
-            c.step(&format!("Ouvrir {url}"), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+            // Comme un utilisateur : dans le navigateur demandé (ou celui qu'on vient d'ouvrir), on clique
+            // dans la barre d'adresse (⌘L), on tape et on valide. Sinon, le navigateur par défaut.
+            let browser = browser_named(text).or_else(|| current_app.as_deref().and_then(browser_named));
+            match browser {
+                Some(b) => {
+                    if current_app.as_deref().map(|a| fold(a) != fold(b)).unwrap_or(true) {
+                        *current_app = Some(open_app(c, b).await?);
+                    }
+                    c.pause(500).await;
+                    c.key("cmd+l").await?;
+                    c.pause(300).await;
+                    c.call(json!({"cmd": "type", "text": url})).await?;
+                    c.pause(300).await;
+                    c.key("return").await?;
+                    c.step(&format!("{b} : {url}"), "Je tape l'adresse dans la barre du navigateur, comme toi.", "ok", true);
+                    c.pause(1500).await;
+                }
+                None => {
+                    let r = c.call(json!({"cmd": "open_url", "url": url})).await?;
+                    c.step(&format!("Ouvrir {url}"), "Navigateur par défaut.", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+                }
+            }
         }
         "nouvelle_note" => {
             let content = slot("contenu").filter(|s| s.len() > 2).or_else(|| after(text, &[" avec ", " : ", "note "])).unwrap_or_default();
@@ -1157,13 +1319,20 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
                 Ok(w) => w,
                 Err(_) => c.ask(&format!("À qui envoyer le message sur {} ?", chat.app)).await?,
             };
-            let msg = body_in(text).or_else(|| slot("message")).filter(|m| !m.trim().is_empty());
+            let same = is_same_ref(text);
+            let msg = fields_in(text).1.or_else(|| if same { None } else { body_in(text) }).or_else(|| if same { None } else { slot("message") })
+                .or_else(|| if same { c.last_message.clone() } else { None })
+                .filter(|m| !m.trim().is_empty());
+            if same && msg.is_some() {
+                c.step("Même message", &format!("Tu as dit « le même » : je reprends « {} ».", msg.clone().unwrap_or_default()), "ok", true);
+            }
             let msg = match msg {
                 Some(m) => m,
                 None => c.ask("Quel message veux-tu envoyer ?").await?,
             };
             c.step(&format!("Message pour {who} sur {}", chat.app), &format!("{} est une messagerie : je vais ouvrir la conversation avec {who}, écrire, vérifier puis envoyer après ton accord.", chat.app), "ok", true);
             send_chat(c, chat, &who, &msg).await?;
+            c.last_message = Some(msg.clone());
             let _ = c.state.db.lock().unwrap().set_setting("lastChatApp", chat.app);
             *current_app = Some(chat.app.to_string());
         }
@@ -1175,15 +1344,19 @@ async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) 
                 to = email_in(&a);
             }
             let to = to.ok_or("Adresse e-mail invalide.")?;
-            let body = body_in(text).or_else(|| slot("message")).unwrap_or_default();
+            let (f_subject, f_body) = fields_in(text);
+            let same = is_same_ref(text);
+            let body = f_body.or_else(|| body_in(text)).or_else(|| slot("message")).or_else(|| if same { c.last_message.clone() } else { None }).unwrap_or_default();
             let body = if body.is_empty() { c.ask("Que veux-tu écrire dans ce mail ?").await? } else { body };
-            let subject = slot("objet").unwrap_or_else(|| {
+            let subject = f_subject.or_else(|| slot("objet")).or_else(|| if same { c.last_subject.clone() } else { None }).unwrap_or_else(|| {
                 let s: String = body.split_whitespace().take(6).collect::<Vec<_>>().join(" ");
                 let mut ch = s.chars();
                 ch.next().map(|f| f.to_uppercase().collect::<String>() + ch.as_str()).unwrap_or_default()
             });
             let (client, why) = choose_mail_client(c, text, slot("app"), current_app.as_deref()).await;
             send_mail(c, &client, &why, &to, &subject, &body).await?;
+            c.last_subject = Some(subject.clone());
+            c.last_message = Some(body.clone());
             *current_app = Some(client.app.to_string());
         }
         "enregistrer" => {
@@ -1298,7 +1471,7 @@ pub fn merge_followups(steps: Vec<String>) -> Vec<String> {
 
 pub async fn run(state: &AppState, app: &AppHandle, goal: &str, mode: &str, cancel: &Cancel, channel: &Channel<ControlEvent>) -> Result<(String, usize), String> {
     let steps = merge_followups(split_steps(goal));
-    let mut c = Ctx { state, app, mode, cancel, channel, n: 0 };
+    let mut c = Ctx { state, app, mode, cancel, channel, n: 0, last_subject: None, last_message: None };
     let mut current_app: Option<String> = None;
     if steps.len() > 1 {
         c.status(&format!("{} tâches à enchaîner : {}", steps.len(), steps.join(" → ")));
@@ -1386,6 +1559,19 @@ mod tests {
         assert_eq!(body_in(&m[1]).as_deref(), Some("j'arrive"));
         let m = merge_followups(split_steps("écris à Léa sur WhatsApp, envoie-lui « on se voit à 18h »"));
         assert_eq!(body_in(m.last().unwrap()).as_deref(), Some("on se voit à 18h"));
+        let (sub, msg) = fields_in("envoie un message sur outlook à paul@exemple.fr avec objet salut et message coucou et le même sur discord à First Pi");
+        assert_eq!((sub.as_deref(), msg.as_deref()), (Some("salut"), Some("coucou")));
+        let st = split_steps("envoie un message sur outlook à paul@exemple.fr avec objet salut et message coucou et le même sur discord à First Pi");
+        assert_eq!(st.len(), 2, "{st:?}");
+        assert!(is_same_ref(&st[1]) && chat_named(&st[1]).unwrap().app == "Discord");
+        assert_eq!(recipient_in(&st[1]).as_deref(), Some("First Pi"));
+        assert_eq!(fields_in("envoie un mail à x@y.fr, objet : Réunion, message : on décale à lundi").0.as_deref(), Some("Réunion"));
+        assert_eq!(fields_in("envoie un mail à x@y.fr, objet : Réunion, message : on décale à lundi").1.as_deref(), Some("on décale à lundi"));
+        assert_eq!(chat_named("envoie sur discrod").unwrap().app, "Discord");
+        assert_eq!(client_named("outlok").unwrap().app, "Microsoft Outlook");
+        assert_eq!(browser_named("va sur chrom"), Some("Google Chrome"));
+        assert_eq!(browser_named("ouvre google chrome"), Some("Google Chrome"));
+        assert!(browser_named("ouvre photoshop").is_none());
         assert!(is_mail_request("envoie un mail depuis Outlook") && !is_mail_request("écris à Léa sur Discord"));
         assert_eq!(split_steps("ouvre Outlook et envoie un mail à paul@exemple.fr pour dire bonjour"), vec!["ouvre Outlook", "envoie un mail à paul@exemple.fr pour dire bonjour"]);
     }

@@ -22,7 +22,7 @@
 </head>
 <body>
   <div class="ask" id="ask">
-    <div class="head"><span class="mark"></span><b id="title">Nova Control</b></div>
+    <div class="head"><span class="mark"></span><b id="title" style="flex:1">Nova Control</b><button class="icon-btn" id="close" title="Fermer" style="width:22px;height:22px;font-size:14px;line-height:1">×</button></div>
     <pre class="detail" id="detail"></pre>
     <div class="row" id="actions"></div>
   </div>
@@ -66,6 +66,13 @@
       requestAnimationFrame(() => requestAnimationFrame(() => box.classList.add('in')));
     });
     T.event.listen('ask-close', () => { box.classList.remove('in'); });
+    // × : une demande d'accord est refusée, une question arrête la tâche, une fin de tâche se ferme.
+    document.getElementById('close').onclick = () => {
+      if (!current) return done('');
+      if (current.kind === 'approval') { invoke('control_decide', { id: current.id, allow: false }); return done('Refusé.'); }
+      if (current.kind === 'question') { invoke('control_stop'); return done('Tâche arrêtée.'); }
+      done('');
+    };
     // Survol de la carte : elle prend le clavier (le premier clic d'une fenêtre inactive n'arrive pas
     // toujours jusqu'au champ). Le texte tapé va alors directement dans « Ta réponse ».
     const grab = () => invoke('island_focus').catch(() => {}).then(() => {

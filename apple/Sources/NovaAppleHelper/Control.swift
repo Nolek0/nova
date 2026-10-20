@@ -21,6 +21,7 @@ import ApplicationServices
 import Carbon
 import Foundation
 import ScreenCaptureKit
+import Vision
 
 private let syntheticMark: Int64 = 0x4E4F5641 // « NOVA »
 
@@ -177,6 +178,10 @@ enum ControlSession {
                 e?.cgEvent?.post(tap: .cghidEventTap)
             }
             return ["ok": true]
+        case "read_screen":
+            // « Regarder l'écran » comme un humain : capture + reconnaissance du texte (sur l'appareil).
+            // Renvoie chaque ligne de texte lue avec sa position à l'écran (points).
+            return readScreen()
         case "find_app":
             return ["apps": installedApps(matching: r["name"] as? String ?? "")]
         case "mail":
@@ -496,7 +501,24 @@ enum ControlSession {
         return ["error": app.map { "\(msg) (Autorise NOVA à contrôler \($0) : Réglages Système › Confidentialité et sécurité › Automatisation.)" } ?? msg]
     }
 
-    /// Applications installées dont le nom ressemble à `name` (Spotlight).
+    static func levenshtein(_ a: String, _ b: String) -> Int {
+        let a = Array(a), b = Array(b)
+        if a.isEmpty { return b.count }
+        if b.isEmpty { return a.count }
+        var prev = Array(0...b.count)
+        for i in 1...a.count {
+            var cur = [i] + Array(repeating: 0, count: b.count)
+            for j in 1...b.count {
+                cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1))
+            }
+            prev = cur
+        }
+        return prev[b.count]
+    }
+
+    /// Applications installées dont le nom ressemble à `name` : recherche Spotlight sur les noms
+    /// de fichier ET les noms affichés (traduits : « Calculatrice », « Réglages Système »),
+    /// avec tolérance aux fautes de frappe (« outlok » → « Microsoft Outlook »).
     static func installedApps(matching name: String) -> [String] {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/mdfind")
@@ -507,16 +529,74 @@ enum ControlSession {
         let data = out.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
         let want = norm(name)
-        let names = Set(String(decoding: data, as: UTF8.self).split(separator: "\n").map { URL(fileURLWithPath: String($0)).deletingPathExtension().lastPathComponent })
-        let scored = names.compactMap { n -> (String, Int)? in
-            let k = norm(n)
-            if k == want { return (n, 0) }
-            if k.hasPrefix(want) || want.hasPrefix(k) { return (n, 1) }
-            if k.contains(want) || want.contains(k) { return (n, 2) }
-            let wa = Set(want.split(separator: " ")), ka = Set(k.split(separator: " "))
-            return wa.intersection(ka).isEmpty ? nil : (n, 3)
+        var candidates: [(String, String)] = [] // (nom à ouvrir, nom comparé)
+        for path in String(decoding: data, as: UTF8.self).split(separator: "\n") {
+            let url = URL(fileURLWithPath: String(path))
+            let file = url.deletingPathExtension().lastPathComponent
+            candidates.append((file, file))
+            let shown = FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+            if shown != file { candidates.append((file, shown)) }
         }
-        return scored.sorted { ($0.1, $0.0.count) < ($1.1, $1.0.count) }.prefix(5).map { $0.0 }
+        var scored: [(String, Int)] = []
+        for (open, shown) in candidates {
+            let k = norm(shown)
+            let words = k.split(separator: " ").map(String.init)
+            var score: Int?
+            if k == want { score = 0 }
+            else if k.hasPrefix(want) || want.hasPrefix(k) { score = 1 }
+            else if words.contains(where: { $0 == want }) { score = 1 }
+            else if k.contains(want) { score = 2 }
+            else {
+                // Faute de frappe : un mot du nom à 1-2 lettres près.
+                let d = ([k] + words).map { levenshtein($0, want) }.min() ?? 99
+                if want.count >= 4 && d <= (want.count >= 7 ? 2 : 1) { score = 3 + d }
+            }
+            if let sc = score { scored.append((open, sc)) }
+        }
+        var seen = Set<String>()
+        return scored.sorted { ($0.1, $0.0.count) < ($1.1, $1.0.count) }.map { $0.0 }.filter { seen.insert($0).inserted }.prefix(5).map { $0 }
+    }
+
+    /// Capture de l'écran de l'application active et lecture du texte (Vision, sur l'appareil).
+    static func readScreen() -> [String: Any] {
+        guard CGPreflightScreenCaptureAccess() else { return ["error": "permission"] }
+        let sem = DispatchSemaphore(value: 0)
+        nonisolated(unsafe) var lines: [[String: Any]] = []
+        nonisolated(unsafe) var failure: String?
+        let win: CGRect? = {
+            guard let app = targetApp() else { return nil }
+            let ax = AXUIElementCreateApplication(app.processIdentifier)
+            return (attr(ax, kAXFocusedWindowAttribute) as! AXUIElement?).flatMap { frame(of: $0) }
+        }()
+        Task {
+            defer { sem.signal() }
+            guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) else { failure = "capture impossible"; return }
+            let mid = win.map { CGPoint(x: $0.midX, y: $0.midY) }
+            guard let display = content.displays.first(where: { d in mid.map { d.frame.contains($0) } ?? false }) ?? content.displays.first else { return }
+            let own = content.applications.filter { ownBundles.contains($0.bundleIdentifier) }
+            let filter = SCContentFilter(display: display, excludingApplications: own, exceptingWindows: [])
+            let cfg = SCStreamConfiguration()
+            cfg.width = display.width * 2
+            cfg.height = display.height * 2
+            cfg.showsCursor = false
+            guard let img = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg) else { failure = "capture impossible"; return }
+            let req = VNRecognizeTextRequest()
+            req.recognitionLevel = .accurate
+            req.recognitionLanguages = ["fr-FR", "en-US"]
+            req.usesLanguageCorrection = false
+            try? VNImageRequestHandler(cgImage: img, options: [:]).perform([req])
+            let f = display.frame
+            for o in req.results ?? [] {
+                guard let t = o.topCandidates(1).first?.string else { continue }
+                let b = o.boundingBox // normalisé, origine en bas à gauche
+                let x = f.minX + b.minX * f.width, w = b.width * f.width
+                let y = f.minY + (1 - b.maxY) * f.height, h = b.height * f.height
+                lines.append(["text": t, "x": Int(x + w / 2), "y": Int(y + h / 2), "w": Int(w), "h": Int(h)])
+            }
+        }
+        _ = sem.wait(timeout: .now() + 8)
+        if let e = failure { return ["error": e] }
+        return ["lines": lines]
     }
 
     static func appleScriptString(_ s: String) -> String {

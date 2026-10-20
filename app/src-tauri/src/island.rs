@@ -290,7 +290,23 @@ pub fn island_open(app: AppHandle, conversation_id: Option<String>, mode: String
 /// Clic dans l'île : elle prend le clavier (sinon la frappe irait à l'app au premier plan).
 #[tauri::command]
 pub fn island_focus(window: tauri::WebviewWindow) {
+    // Donner le clavier à une petite fenêtre active NOVA, ce qui ferait passer toutes ses fenêtres
+    // devant. Si NOVA n'était pas au premier plan, sa fenêtre principale retourne derrière les autres.
+    let was_active: bool = unsafe {
+        let app: *mut AnyObject = msg_send![objc2::class!(NSApplication), sharedApplication];
+        msg_send![app, isActive]
+    };
     let _ = window.set_focus();
+    if !was_active && window.label() != "main" {
+        if let Some(main) = window.app_handle().get_webview_window("main") {
+            if let Ok(ns) = main.ns_window() {
+                let ns = ns as usize;
+                let _ = window.run_on_main_thread(move || unsafe {
+                    let _: () = msg_send![ns as *mut AnyObject, orderBack: std::ptr::null::<AnyObject>()];
+                });
+            }
+        }
+    }
     if let Ok(ns) = window.ns_window() {
         let ns = ns as usize;
         let _ = window.run_on_main_thread(move || unsafe {

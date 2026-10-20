@@ -713,6 +713,35 @@ fn save_base64_file(path: String, data: String) -> R<()> {
     std::fs::write(&path, bytes).map_err(err)
 }
 
+/// Nova Control lancé depuis le chat : la demande et le compte rendu sont enregistrés dans
+/// l'historique comme une conversation normale. Renvoie l'identifiant de la conversation.
+#[tauri::command]
+fn control_save(state: State<'_, AppState>, conversation_id: Option<String>, goal: String, report: String) -> R<String> {
+    let db = state.db.lock().unwrap();
+    let cid = match conversation_id {
+        Some(id) => id,
+        None => {
+            let c = db::Conversation {
+                id: uuid::Uuid::new_v4().to_string(),
+                title: chat::title_from(&goal),
+                created_at: db::now(),
+                updated_at: db::now(),
+                pinned: false,
+                kind: "chat".into(),
+                project: None,
+            };
+            db.save_conversation(&c).map_err(err)?;
+            c.id
+        }
+    };
+    db.save_message(&chat::new_message(&cid, "user", &goal, vec![], "complete")).map_err(err)?;
+    let mut reply = chat::new_message(&cid, "assistant", &report, vec![], "complete");
+    reply.meta.tool = Some("Nova Control".into());
+    reply.meta.engine = Some("Nova Control (sur l'appareil)".into());
+    db.save_message(&reply).map_err(err)?;
+    Ok(cid)
+}
+
 // ---------------------------------------------------------------- Nova Code
 
 fn project_root(state: &AppState, project: &str) -> R<std::path::PathBuf> {
@@ -829,7 +858,7 @@ pub fn run() {
             bootstrap, list_conversations, get_messages, rename_conversation, toggle_pin, delete_conversation, search, library,
             set_setting, add_memory, delete_memory, import_attachment, import_bytes, apple_camera,
             send_message, regenerate, cancel_generation, decide_action,
-            models_overview, install_engine, download_model, cancel_download, delete_model, warm_up, set_menu_labels, code_open_project, code_tree, code_read, code_write, save_base64_file,
+            models_overview, install_engine, download_model, cancel_download, delete_model, warm_up, set_menu_labels, code_open_project, code_tree, code_read, code_write, save_base64_file, control_save,
             weather, search_places, set_allowed_folders, search_files, open_path, open_url, system_info,
             export_data, delete_all_conversations, activity_log, clear_activity, dictation_start, dictation_stop,
             math_eval, math_run, units_catalog, units_convert, stats_describe, probabilities, matrix_op, plot,

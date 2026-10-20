@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Nova Control</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    /* Animation obligatoire quand Nova Control prend la main : sort de l'encoche, 3 s, puis y retourne. */
+    html, body { margin: 0; height: 100%; background: transparent !important; overflow: hidden; pointer-events: none; }
+    .pill { --nw: 190px; --nh: 32px; position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+      width: var(--nw); height: var(--nh); background: #000; border-radius: 0 0 12px 12px; overflow: hidden;
+      transition: width .55s cubic-bezier(.2,.9,.25,1.12), height .55s cubic-bezier(.2,.9,.25,1.12), border-radius .55s, opacity .4s; }
+    .pill.open { width: 400px; height: 78px; border-radius: 0 0 28px 28px; box-shadow: 0 0 22px rgba(34,211,255,.35); }
+    .pill.gone { opacity: 0; }
+    .pill::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 2px;
+      background: conic-gradient(from var(--a, 0deg), transparent 0 60%, #22d3ff 75%, #5b8cff 85%, transparent 100%);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+      opacity: 0; transition: opacity .3s; animation: spin 1.6s linear infinite; }
+    .pill.open::before { opacity: 1; }
+    @property --a { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+    @keyframes spin { to { --a: 360deg; } }
+    .content { position: absolute; left: 0; right: 0; bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;
+      color: #e8fbff; font: 600 14px -apple-system, system-ui, sans-serif; opacity: 0; transform: translateY(-6px); transition: opacity .35s .25s, transform .35s .25s; }
+    .pill.open .content { opacity: 1; transform: none; }
+    .content .mark { width: 20px; height: 20px; }
+    .content .mark::before { inset: 3px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #22d3ff; box-shadow: 0 0 10px #22d3ff; animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 50% { transform: scale(.55); opacity: .5; } }
+  </style>
+</head>
+<body>
+  <div class="pill" id="pill"><div class="content"><span class="mark"></span><span>Nova Control prend la main</span><span class="dot"></span></div></div>
+  <script>
+    const pill = document.getElementById('pill');
+    window.__TAURI__.event.listen('takeover', (e) => {
+      const g = e.payload || {};
+      if (g.nw) pill.style.setProperty('--nw', g.nw + 'px');
+      if (g.nh) pill.style.setProperty('--nh', g.nh + 'px');
+      requestAnimationFrame(() => requestAnimationFrame(() => pill.classList.add('open')));
+      setTimeout(() => pill.classList.remove('open'), 2500);
+      setTimeout(() => pill.classList.add('gone'), 3000);
+    });
+  </script>
+</body>
+</html>

@@ -108,7 +108,11 @@ def g_envoyer_mail(rng, t):
                         f"envoie un email à {who} pour lui dire que {msg}", f"envoie à {who} un mail disant {msg}"])
         return G.polite(rng, f), [("destinataire", who), ("message", msg)]
     if r < 0.7:
-        f = rng.choice([f"envoie un mail à {who} avec l'objet {sub} et le message {msg}", f"écris à {who}, objet {sub} : {msg}"])
+        f = rng.choice([f"envoie un mail à {who} avec l'objet {sub} et le message {msg}", f"écris à {who}, objet {sub} : {msg}",
+                        f"envoie un mail à {who} avec objet {sub} et message {msg}", f"envoie un mail à {who} objet {sub} message {msg}",
+                        f"mail à {who}, objet : {sub}, message : {msg}", f"envoie un mail à {who} avec pour objet {sub} et pour contenu {msg}",
+                        f"envoie un message sur outlook à {who} avec objet {sub} et message {msg}", f"écris un mail à {who} sujet {sub} texte {msg}",
+                        f"envoie un mail à {who} dont l'objet est {sub} et le message {msg}"])
         return G.polite(rng, f), [("destinataire", who), ("objet", sub), ("message", msg)]
     f = rng.choice([f"envoie un mail à {who}", f"écris un mail à {who}", f"nouveau mail pour {who}", f"prépare un email pour {who}"])
     return G.polite(rng, f), [("destinataire", who)]
@@ -184,6 +188,8 @@ def fake_msg(rng, short=False):
 
 
 def g_envoyer_message(rng, t):
+    if rng.random() < 0.08:
+        return g_meme_message(rng, t)
     who = fake_who(rng) if not t else rng.choice(["Noah", "Camille", "Zéphyr 9", "@nina.k", "BigBoss77"])
     app = pick(rng, CHAT_APPS, CHAT_APPS_TEST, t) if rng.random() < 0.7 else None
     msg = fake_msg(rng)
@@ -204,6 +210,29 @@ def g_envoyer_message(rng, t):
     if rng.random() < 0.08:
         return G.polite(rng, f"envoie un message à {who}{sur}"), [("destinataire", who)] + slots_app
     return G.polite(rng, text), [("destinataire", who)] + slots_app + [("message", m)]
+
+
+def g_meme_message(rng, t):
+    """« et le même sur Discord à X » : on reprend le message précédent."""
+    who = fake_who(rng)
+    app = rng.choice(CHAT_APPS)
+    f = rng.choice([f"le même sur {app} à {who}", f"pareil sur {app} pour {who}", f"envoie la même chose à {who} sur {app}",
+                    f"fais pareil sur {app} avec {who}", f"idem sur {app} à {who}", f"la même chose sur {app} pour {who}",
+                    f"envoie le même message à {who} sur {app}", f"refais pareil à {who} sur {app}"])
+    return G.polite(rng, f), [("destinataire", who), ("app", app)]
+
+
+def typo(rng, word):
+    """Faute de frappe sur un nom d'app (« outlok », « discrod », « chrom »)."""
+    if len(word) < 4:
+        return word
+    i = rng.randrange(1, len(word) - 1)
+    op = rng.random()
+    if op < 0.4:
+        return word[:i] + word[i + 1:]
+    if op < 0.8:
+        return word[:i] + word[i + 1] + word[i] + word[i + 2:]
+    return word[:i] + word[i] + word[i:]
 
 
 def g_enregistrer(rng, t):
@@ -335,6 +364,13 @@ def build(seed, test):
             n = max(60, n // 6)
         for _ in range(n):
             text, slots = gen(rng, test)
+            # Fautes sur les noms d'applications : le modèle doit les repérer quand même.
+            if not test and rng.random() < 0.12:
+                for k, v in list(slots):
+                    if k == "app" and v in text:
+                        w = typo(rng, v)
+                        text = text.replace(v, w, 1)
+                        slots = [(kk, w if (kk == k and vv == v) else vv) for kk, vv in slots]
             text, slots = G.noisy(text, slots, rng)
             rows.append((intent, text, slots))
     rng.shuffle(rows)

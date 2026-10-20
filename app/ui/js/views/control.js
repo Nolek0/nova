@@ -178,10 +178,28 @@ export async function runInline(goal, mount, ctx) {
       st.status = '';
       st.running = false;
       st.steps.push(ev.type === 'error' && ev.message === 'permissions' ? { type: 'error', message: 'Autorisations manquantes : page Nova Control.' } : ev);
+      saveToHistory(goal, st, ctx);
     } else st.steps.push(ev);
     rerender();
   };
   try {
     await invoke('control_start', { goal, modelId: ctx.state.settings.controlModel || null, mode: ctx.state.settings.controlMode || 'auto', onEvent: ch });
   } catch (e) { fail(errorText(e)); }
+}
+
+/** Compte rendu Markdown d'une tâche, enregistré dans l'historique du chat. */
+async function saveToHistory(goal, st, ctx) {
+  const lines = [];
+  const end = st.steps.find((s) => s.type === 'done' || s.type === 'error');
+  lines.push(`**Nova Control** — ${end?.type === 'done' ? end.summary : `⚠️ ${end?.message || 'interrompu'}`}`, '');
+  for (const s of st.steps) {
+    if (s.type === 'step') lines.push(`${s.ok ? '✓' : '✗'} ${s.action}${s.ok ? '' : ` — ${s.result}`}`);
+    else if (s.type === 'approval') lines.push(`🛡 ${s.title} : ${s.decided === 'yes' ? 'autorisé' : s.decided === 'no' ? 'refusé' : 'sans réponse'}`);
+    else if (s.type === 'question') lines.push(`❓ ${s.text}${s.answered !== undefined ? ` → ${s.answered}` : ''}`);
+  }
+  try {
+    const id = await invoke('control_save', { conversationId: ctx.state.convId || null, goal, report: lines.join('\n') });
+    ctx.state.convId = id;
+    ctx.reloadConversations();
+  } catch {}
 }

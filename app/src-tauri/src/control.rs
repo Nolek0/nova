@@ -195,6 +195,91 @@ pub(crate) fn move_cursor(app: &AppHandle, x: f64, y: f64, click: bool, label: &
 }
 
 /// La fenêtre de NOVA se retire pendant la tâche pour ne pas recouvrir l'application pilotée.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Insets {
+    top: f64,
+    left: f64,
+    bottom: f64,
+    right: f64,
+}
+unsafe impl Encode for Insets {
+    const ENCODING: Encoding = Encoding::Struct("NSEdgeInsets", &[f64::ENCODING, f64::ENCODING, f64::ENCODING, f64::ENCODING]);
+}
+
+/// Animation obligatoire dans l'encoche quand Nova Control prend la main (3 s, aucun clic possible).
+/// Sur un Mac sans encoche (ou un écran externe), elle apparaît en haut au centre de l'écran principal.
+fn show_takeover(app: &AppHandle) {
+    const W: f64 = 440.0;
+    const H: f64 = 110.0;
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(w) = handle.get_webview_window("control-notch") {
+            let _ = w.destroy();
+        }
+        // Écran avec encoche (sinon écran principal) et taille de l'encoche.
+        let (frame, nw, nh) = unsafe {
+            let list: *mut AnyObject = msg_send![class!(NSScreen), screens];
+            let n: usize = if list.is_null() { 0 } else { msg_send![list, count] };
+            let mut pick: Option<(Rect, f64, f64)> = None;
+            for i in 0..n {
+                let sc: *mut AnyObject = msg_send![list, objectAtIndex: i];
+                let responds: bool = msg_send![sc, respondsToSelector: objc2::sel!(safeAreaInsets)];
+                if !responds {
+                    continue;
+                }
+                let ins: Insets = msg_send![sc, safeAreaInsets];
+                if ins.top > 0.0 {
+                    let f: Rect = msg_send![sc, frame];
+                    let l: Rect = msg_send![sc, auxiliaryTopLeftArea];
+                    let r: Rect = msg_send![sc, auxiliaryTopRightArea];
+                    pick = Some((f, (f.w - l.w - r.w).clamp(120.0, 300.0), ins.top));
+                    break;
+                }
+            }
+            pick.unwrap_or_else(|| {
+                let m: *mut AnyObject = msg_send![class!(NSScreen), mainScreen];
+                let f: Rect = if m.is_null() { Rect { x: 0.0, y: 0.0, w: 1440.0, h: 900.0 } } else { msg_send![m, frame] };
+                (f, 180.0, 26.0)
+            })
+        };
+        let Ok(win) = WebviewWindowBuilder::new(&handle, "control-notch", WebviewUrl::App("takeover.html".into()))
+            .title("Nova Control")
+            .decorations(false)
+            .transparent(true)
+            .shadow(false)
+            .always_on_top(true)
+            .resizable(false)
+            .skip_taskbar(true)
+            .focused(false)
+            .visible_on_all_workspaces(true)
+            .visible(false)
+            .build()
+        else {
+            return;
+        };
+        let _ = win.set_ignore_cursor_events(true);
+        if let Ok(ns) = win.ns_window() {
+            unsafe {
+                let ns = ns as *mut AnyObject;
+                let _: () = msg_send![ns, setLevel: 1002isize];
+                let _: () = msg_send![ns, setCollectionBehavior: (1usize << 0) | (1usize << 4) | (1usize << 8)];
+                let _: () = msg_send![ns, setHasShadow: false];
+                let _: () = msg_send![ns, setIgnoresMouseEvents: true];
+                let _: () = msg_send![ns, setFrame: Rect { x: frame.x + (frame.w - W) / 2.0, y: frame.y + frame.h - H, w: W, h: H }, display: true];
+                let _: () = msg_send![ns, orderFrontRegardless];
+            }
+        }
+        let w2 = win.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(400));
+            let _ = w2.emit_to("control-notch", "takeover", json!({"nw": nw, "nh": nh}));
+            std::thread::sleep(Duration::from_millis(3700));
+            let _ = w2.destroy();
+        });
+    });
+}
+
 /// Carte flottante en bas à droite de l'écran : questions et demandes d'accord sans faire apparaître NOVA.
 fn show_prompt(app: &AppHandle, payload: Value) {
     const W: f64 = 400.0;
@@ -470,6 +555,7 @@ async fn run(state: &AppState, app: &AppHandle, goal: &str, model: &ModelInfo, m
         let _ = call(app, json!({"cmd": "request_permissions"})).await;
         return Err("permissions".into());
     }
+    show_takeover(app);
     show_cursor(app);
     hide_main(app);
     tokio::time::sleep(Duration::from_millis(400)).await;
@@ -740,6 +826,7 @@ pub async fn control_start(state: State<'_, AppState>, app: AppHandle, goal: Str
                 let _ = call(&app, json!({"cmd": "request_permissions"})).await;
                 return Err("permissions".to_string());
             }
+            show_takeover(&app);
             show_cursor(&app);
             // NOVA reste où il est : les applications pilotées passent d'elles-mêmes au premier plan.
             // Le temps que les fenêtres du curseur néon soient prêtes (sinon les premiers mouvements sont perdus).

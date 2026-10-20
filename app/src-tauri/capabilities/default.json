@@ -7,7 +7,8 @@
     "quick",
     "island-*",
     "cursor-*",
-    "control-ask"
+    "control-ask",
+    "control-notch"
   ],
   "permissions": [
     "core:default",

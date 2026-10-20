@@ -30,3 +30,7 @@ envoyer_message	envoie salut à First Pi sur Discord	destinataire=First Pi;app=D
 envoyer_message	envoie un message a JSKabylie1946 sur discord : salut	destinataire=JSKabylie1946;app=discord;message=salut
 envoyer_message	dis à xX_Dark_Xx que je joue ce soir	destinataire=xX_Dark_Xx;message=je joue ce soir
 envoyer_message	écris à @lea.m sur insta : tu viens demain ?	destinataire=@lea.m;app=insta;message=tu viens demain ?
+envoyer_mail	envoie un message sur outlook à paul@exemple.fr avec objet salut et message coucou	destinataire=paul@exemple.fr;app=outlook;objet=salut;message=coucou
+envoyer_message	le même sur discord à First Pi	destinataire=First Pi;app=discord
+ouvrir_app	ouvre outlok	app=outlok
+ouvrir_app	va sur chrom	app=chrom

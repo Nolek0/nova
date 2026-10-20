@@ -2,6 +2,19 @@
 
 All notable changes to NOVA are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.4.6] — 2026-10-20
+
+### Changed
+- **Finds apps like a person**: Spotlight search on file and displayed (translated) names with typo tolerance, then Spotlight on screen (⌘Space, type, Enter) as a last resort.
+- **Typos** in app names are understood (“outlok”, “discrod”, “chrom”), and the Nova Control model was retrained with more typos.
+- **Browsers like a user**: “go to Chrome and search youtube.com” types the address in Chrome's address bar (⌘L) instead of opening Safari in the background; a “search” for something that looks like a website opens the site.
+- **NOVA never comes to the front by itself** anymore (the floating card no longer pulls the main window forward).
+- **Mandatory notch animation** for 3 seconds when Nova Control takes control (not clickable).
+- **Looks at the screen when stuck**: if a button is not in the app's interface list, Nova Control captures the screen, reads the text on-device and clicks the right word.
+- **Subject and message** are read from the sentence (“with subject hi and message hello”), and **“the same on Discord to X”** reuses the previous message without asking.
+- Tasks started from the chat are saved in the history.
+- The floating card has a close button (×).
+
 ## [0.4.5] — 2026-10-20
 
 ### Changed
