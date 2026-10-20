@@ -12,3 +12,5 @@ nova1/target/
 
 # Images d'entraînement de Nova 1 Vision (téléchargées, non versionnées)
 nova1/data/images/
+nova1/model/*.bak
+nova1/model/vision-train.log

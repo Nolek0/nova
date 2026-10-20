@@ -9,6 +9,7 @@ import * as Weather from './views/weather.js';
 import * as Files from './views/files.js';
 import * as Misc from './views/misc.js';
 import * as Code from './views/code.js';
+import * as Control from './views/control.js';
 import * as Updater from './updater.js';
 import * as I18n from './i18n.js';
 
@@ -183,6 +184,7 @@ const NAV = [
   ['library', 'Bibliothèque', 'image'],
   ['gallery', 'Fonctionnalités', 'sparkles'],
   ['models', 'Modèles', 'cpu'],
+  ['control', 'Nova Control', 'power'],
   ['activity', 'Activité', 'list'],
   ['settings', 'Paramètres', 'settings'],
 ];
@@ -221,6 +223,7 @@ export function renderSidebar() {
     }
   }
   for (const [id, label, ic] of NAV) {
+    if (id === 'control' && !isMac()) continue;
     const b = el(`<button class="nav-item ${state.view === id ? 'active' : ''}">${icon(ic)}<span>${label}</span></button>`);
     b.onclick = () => setView(id);
     box.appendChild(b);
@@ -378,6 +381,7 @@ export function setView(view, opts = {}) {
     case 'library': Misc.renderLibrary(v, ctx); break;
     case 'gallery': Misc.renderGallery(v, ctx); break;
     case 'activity': Misc.renderActivity(v, ctx); break;
+    case 'control': Control.render(v, ctx); break;
   }
   renderSidebar();
 }
@@ -446,6 +450,7 @@ function buildComposer(placeholder = 'Écris à NOVA…') {
         ${isMac() ? `<button class="icon-btn" data-act="mic" title="Dicter (reconnaissance locale)">${icon('mic')}</button>` : ''}
         <button class="icon-btn" data-act="tools" title="Outils">${icon('fx')}</button>
         <button class="web-toggle" data-act="web" title="Ajouter des sources Wikipédia à la réponse (quitte l’ordinateur)">${icon('globe')}<span>Internet</span></button>
+        ${isMac() ? `<button class="web-toggle control-toggle" data-act="control" title="Nova Control : NOVA réalise ta demande sur l’ordinateur (clics, frappe, menus)">${icon('power')}<span>Contrôle</span></button>` : ''}
         <button class="web-toggle think-toggle" data-act="think" title="Réflexion approfondie : plus lent, pour les questions difficiles. Désactivée = réponse rapide.">${icon('brain')}<span>Réflexion</span></button>
         <span class="spacer"></span>
         <button class="model-btn" data-act="model"></button>
@@ -495,6 +500,11 @@ function buildComposer(placeholder = 'Écris à NOVA…') {
   const web = c.querySelector('[data-act=web]');
   web.classList.toggle('on', state.web);
   web.onclick = () => { state.web = !state.web; web.classList.toggle('on', state.web); };
+  const ctl = c.querySelector('[data-act=control]');
+  if (ctl) {
+    ctl.classList.toggle('on', !!state.control);
+    ctl.onclick = () => { state.control = !state.control; ctl.classList.toggle('on', state.control); };
+  }
   const think = c.querySelector('[data-act=think]');
   think.classList.toggle('on', state.settings.thinking === '1');
   think.onclick = () => {
@@ -912,6 +922,21 @@ async function send() {
   const ta = $('#composer textarea');
   if (ta) { ta.value = ''; autosize(ta); }
   renderAttachments();
+  // Mode Contrôle : la demande devient une tâche Nova Control, suivie dans la conversation.
+  if (state.control && isMac()) {
+    if (state.view !== 'chat') { state.convId = null; state.messages = []; setView('chat'); }
+    const inner = $('.messages-inner');
+    if (inner) {
+      const u = el('<div class="msg-user"><div class="bubble"></div></div>');
+      u.querySelector('.bubble').textContent = text;
+      inner.appendChild(u);
+      const mount = el('<div class="control-msg"></div>');
+      inner.appendChild(mount);
+      scrollBottom(true);
+      Control.runInline(text, mount, ctxFor());
+    }
+    return;
+  }
   await runGeneration('send_message', { conversationId: state.convId, text, attachments });
 }
 

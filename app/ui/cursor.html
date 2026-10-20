@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Nova Control</title>
+  <style>
+    /* Curseur néon de Nova Control : dessiné au-dessus de tout, ne capte aucun clic. */
+    html, body { margin: 0; height: 100%; background: transparent !important; overflow: hidden; pointer-events: none; }
+    #cur { position: absolute; left: 0; top: 0; width: 34px; height: 34px; transform: translate(-200px, -200px); opacity: 0;
+      transition: transform .38s cubic-bezier(.2,.8,.2,1), opacity .2s; will-change: transform; }
+    #cur svg { overflow: visible; filter: drop-shadow(0 0 6px #22d3ff) drop-shadow(0 0 14px #2f7dff); }
+    #cur.on { opacity: 1; }
+    .ripple { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; border: 3px solid #39e1ff;
+      box-shadow: 0 0 12px #22d3ff, inset 0 0 8px #22d3ff; animation: ripple .65s ease-out forwards; }
+    @keyframes ripple { from { transform: scale(.4); opacity: 1; } to { transform: scale(3.4); opacity: 0; } }
+    #tag { position: absolute; left: 30px; top: 26px; white-space: nowrap; font: 600 12px -apple-system, system-ui, sans-serif; color: #e8fbff;
+      background: rgba(6, 20, 40, .82); border: 1px solid #2fc9ff; border-radius: 8px; padding: 4px 8px; box-shadow: 0 0 10px rgba(34, 211, 255, .5); max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+    #tag:empty { display: none; }
+  </style>
+</head>
+<body>
+  <div id="cur">
+    <svg width="34" height="34" viewBox="0 0 34 34"><path d="M3 2 L3 27 L10 21 L15 32 L20 30 L15 19 L25 19 Z" fill="#0b2a5e" stroke="#39e1ff" stroke-width="2.2" stroke-linejoin="round"/></svg>
+    <div id="tag"></div>
+  </div>
+  <script>
+    const cur = document.getElementById('cur');
+    const tag = document.getElementById('tag');
+    window.__TAURI__.event.listen('cursor', (e) => {
+      const { visible, x, y, click, label } = e.payload || {};
+      cur.classList.toggle('on', !!visible);
+      if (!visible) return;
+      cur.style.transform = `translate(${x - 3}px, ${y - 2}px)`;
+      tag.textContent = label || '';
+      if (click) {
+        setTimeout(() => {
+          const r = document.createElement('div');
+          r.className = 'ripple';
+          r.style.left = x + 'px';
+          r.style.top = y + 'px';
+          document.body.appendChild(r);
+          setTimeout(() => r.remove(), 700);
+        }, 380);
+      }
+    });
+  </script>
+</body>
+</html>

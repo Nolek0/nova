@@ -3,6 +3,10 @@
 pub mod appmenu;
 pub mod chat;
 pub mod code;
+#[cfg(target_os = "macos")]
+pub mod control;
+#[cfg(target_os = "macos")]
+pub mod control_nova;
 pub mod db;
 #[cfg(target_os = "macos")]
 pub mod island;
@@ -516,7 +520,9 @@ fn open_path(state: State<'_, AppState>, path: String, reveal: bool) -> R<()> {
 
 #[tauri::command]
 fn open_url(url: String) -> R<()> {
-    if !(url.starts_with("https://") || url.starts_with("http://")) {
+    // Pages des Réglages Système (autorisations de Nova Control) : seulement la section Confidentialité.
+    let settings_page = url.starts_with("x-apple.systempreferences:com.apple.preference.security?Privacy_");
+    if !(url.starts_with("https://") || url.starts_with("http://") || settings_page) {
         return Err("Adresse non autorisée.".into());
     }
     open::that_detached(url).map_err(err)
@@ -846,7 +852,19 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             island::island_changed,
             #[cfg(target_os = "macos")]
-            island::island_focus
+            island::island_focus,
+            #[cfg(target_os = "macos")]
+            control::control_permissions,
+            #[cfg(target_os = "macos")]
+            control::control_request_permissions,
+            #[cfg(target_os = "macos")]
+            control::control_decide,
+            #[cfg(target_os = "macos")]
+            control::control_stop,
+            #[cfg(target_os = "macos")]
+            control::control_answer,
+            #[cfg(target_os = "macos")]
+            control::control_start
         ])
         .build(tauri::generate_context!())
         .expect("erreur au démarrage de NOVA")

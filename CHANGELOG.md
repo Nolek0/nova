@@ -2,6 +2,18 @@
 
 All notable changes to NOVA are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.4.1] — 2026-10-20
+
+### Added
+- **Nova Control** (macOS): NOVA carries out tasks on your Mac — open apps and websites, search the web, create notes and folders, send e-mails with Apple Mail, save / export with a name, format and folder, pick menu commands, click buttons, type text, keyboard shortcuts, volume and music — including multi-step requests (“open Photoshop then save the image as PNG on the Desktop”).
+  - Built-in brain: the **Nova Control** model, trained from scratch (no download), plus an executor that reads the screen through Accessibility and recovers from common errors (menu synonyms, shortcut fallbacks, scrolling, app name lookup, unexpected dialogs).
+  - Advanced mode: an installed vision model (Gemma 4) can drive free-form tasks.
+  - **Permission modes** like Claude: Auto (asks for sensitive actions), Manual (asks for every action), Accept all. Esc always stops; Nova Control never types into password fields.
+  - A blue neon cursor shows every move and click; questions from Nova Control can be answered inline.
+  - Available as a page and from the chat (**Control** toggle in the input bar).
+- The notch island folds away while answering and has a stop button.
+- Builds can be signed with a stable certificate so macOS keeps NOVA's permissions across updates.
+
 ## [0.4.0] — 2026-10-19
 
 First public release on GitHub.

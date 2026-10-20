@@ -1,0 +1,23 @@
+ouvrir_app	ouvre photoshop	app=photoshop
+ouvrir_app	lance spotify stp	app=spotify
+enregistrer	enregistre l'image en PNG sur le Bureau	format=PNG;dossier=Bureau
+enregistrer	exporte le fichier en pdf	format=pdf
+enregistrer	sauvegarde sous le nom vacances	nom=vacances
+envoyer_mail	envoie un mail à paul@exemple.fr pour dire que je serai en retard	destinataire=paul@exemple.fr;message=que je serai en retard
+envoyer_mail	écris un mail à maman	destinataire=maman
+nouvelle_note	crée une note Courses avec pain, lait, œufs	titre=Courses;contenu=pain, lait, œufs
+menu	va dans Fichier puis Exporter	chemin=Fichier puis Exporter
+cliquer	clique sur Envoyer	element=Envoyer
+ecrire	écris bonjour tout le monde	texte=bonjour tout le monde
+creer_dossier	crée un dossier photos sur le Bureau	nom=photos;dossier=Bureau
+nouvel_onglet	ouvre un nouvel onglet	
+copier	copie ça	
+annuler	annule	
+capture_ecran	fais une capture d'écran	
+recherche_web	cherche les horaires du cinéma sur google	requete=les horaires du cinéma
+ouvrir_site	va sur youtube	site=youtube
+volume	mets le volume à 30	niveau=30
+fermer_app	ferme Safari	app=Safari
+lecture_pause	mets pause	
+autre	comment on enregistre une image en png	
+autre	explique moi photoshop	

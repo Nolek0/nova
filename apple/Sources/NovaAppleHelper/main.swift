@@ -5,6 +5,7 @@
 //   ocr <chemin>      reconnaissance de texte (Vision) dans une image
 //   camera            photo prise avec l'iPhone via la Caméra de continuité
 //   dictate           dictée locale (Speech) ; « stop » sur l'entrée standard pour terminer
+//   control           Nova Control : session JSON (voir Control.swift)
 //   video <chemin> <dossier>  images clés (JPEG) et transcription locale de l'audio d'une vidéo
 // Chaque réponse est une ligne JSON sur la sortie standard.
 
@@ -61,6 +62,9 @@ case "camera":
 
 case "dictate":
     await Dictation.run()
+
+case "control":
+    ControlSession.run()
 
 case "video":
     let rest = Array(args.dropFirst())

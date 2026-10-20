@@ -8,6 +8,8 @@
 	<string>NOVA utilise le micro uniquement pendant la dictée, lorsque tu l'actives. L'audio n'est jamais enregistré.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>NOVA transcrit ta voix en texte sur ce Mac pendant la dictée.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Nova Control utilise Apple Mail pour écrire et envoyer les e-mails que tu lui demandes, toujours après ton accord.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>NOVA utilise ta position uniquement si tu demandes la météo locale.</string>
 </dict>

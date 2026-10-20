@@ -61,9 +61,12 @@ fn evaluate(m: &Model, data: &[Example]) -> Scores {
 
 fn main() {
     let root = env!("CARGO_MANIFEST_DIR");
-    let train = read(&format!("{root}/data/train.tsv"));
-    let test = read(&format!("{root}/data/test.tsv"));
-    let eval = read(&format!("{root}/data/eval.tsv"));
+    // « control » : modèle Nova Control (mêmes réseau et entraînement, autres données).
+    let control = std::env::args().nth(1).as_deref() == Some("control");
+    let (pre, out_bin, out_rep, title) = if control { ("control_", "nova-control.bin", "RAPPORT_CONTROL.md", "Nova Control") } else { ("", "nova1.bin", "RAPPORT.md", "Nova 1") };
+    let train = read(&format!("{root}/data/{pre}train.tsv"));
+    let test = read(&format!("{root}/data/{pre}test.tsv"));
+    let eval = read(&format!("{root}/data/{pre}eval.tsv"));
 
     let mut intents: Vec<String> = train.iter().map(|e| e.intent.clone()).collect::<BTreeSet<_>>().into_iter().collect();
     intents.retain(|i| i != "autre");
@@ -118,9 +121,9 @@ fn main() {
     let per = t.elapsed().as_secs_f64() * 1000.0 / eval.len() as f64;
 
     std::fs::create_dir_all(format!("{root}/model")).unwrap();
-    std::fs::write(format!("{root}/model/nova1.bin"), &bytes).unwrap();
+    std::fs::write(format!("{root}/model/{out_bin}"), &bytes).unwrap();
     let mut report = format!(
-        "# Nova 1 — rapport d'entraînement\n\n\
+        "# {title} — rapport d'entraînement\n\n\
          Modèle de compréhension des commandes de NOVA, créé et entraîné de zéro (aucun poids extérieur).\n\n\
          | | |\n|---|---|\n| Paramètres | {} |\n| Taille du fichier | {:.1} Mo |\n| Intentions | {} |\n| Exemples d'entraînement | {} |\n| Durée d'entraînement | {:.0} s |\n| Temps d'analyse moyen | {:.2} ms par phrase |\n\n\
          ## Précision\n\n| Jeu | Intention | Informations extraites |\n|---|---|---|\n\
@@ -146,7 +149,7 @@ fn main() {
     for e in &s_eval.errors {
         report += &format!("- {e}\n");
     }
-    std::fs::write(format!("{root}/model/RAPPORT.md"), &report).unwrap();
+    std::fs::write(format!("{root}/model/{out_rep}"), &report).unwrap();
     println!("\n{report}");
     println!("Erreurs (test) :");
     for e in s_test.errors.iter().take(15) {

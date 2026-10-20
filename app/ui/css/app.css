@@ -411,3 +411,20 @@ canvas.plot { width: 100%; height: 340px; display: block; }
 /* Dessins de Nova 1 */
 .md .drawing { display: grid; gap: 6px; justify-items: start; margin: 8px 0; }
 .md .drawing img { width: min(560px, 100%); box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+
+/* Nova Control */
+.control .chip { border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-2); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.control .chip:hover { color: var(--text); border-color: var(--accent); }
+.control .ex { flex-wrap: wrap; gap: 6px; }
+.control .warn-card { border-color: color-mix(in srgb, var(--warning) 45%, transparent); }
+.control .approval { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.control .approval .detail { white-space: pre-wrap; font-size: 12.5px; background: var(--code-bg); border-radius: 8px; padding: 8px 10px; margin: 0; max-height: 220px; overflow: auto; }
+.c-step { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; padding: 6px 2px; }
+.c-step .n { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: color-mix(in srgb, var(--cyan) 18%, transparent); color: var(--cyan); }
+.c-step.bad .n { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+.c-step .err { color: var(--danger); font-size: 12px; }
+.control .done { display: flex; gap: 8px; align-items: center; border-color: color-mix(in srgb, var(--success) 45%, transparent); }
+.control-inline { width: min(640px, 100%); }
+.control-toggle.on { color: var(--cyan); }
+.control-msg { display: block; width: 100%; }
+.control-msg .control-inline { width: min(680px, 100%); }

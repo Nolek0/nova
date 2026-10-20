@@ -1,0 +1,677 @@
+//! macOS uniquement : le « cerveau » intégré de Nova Control, sans grand modèle de langage.
+//!
+//! 1. La demande est découpée en étapes (« ouvre Photoshop puis enregistre l'image en PNG »).
+//! 2. Chaque étape est comprise par le modèle Nova Control (réseau entraîné de zéro, ~0,06 ms) :
+//!    intention + informations (application, format, dossier, destinataire…).
+//! 3. Un exécuteur dédié à chaque intention agit via le module Mac (menus, boutons, raccourcis,
+//!    AppleScript), vérifie le résultat et gère seul les erreurs courantes (synonymes de menus,
+//!    raccourci de secours, défilement, applications introuvables, boîtes de dialogue inattendues).
+
+use crate::control::{ask_approval, ask_question, call, hide_main, move_cursor, sensitive_combo, sensitive_label, ControlEvent};
+use crate::llm::Cancel;
+use crate::AppState;
+use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::sync::OnceLock;
+use std::time::Duration;
+use tauri::ipc::Channel;
+use tauri::AppHandle;
+
+pub const BRAIN_ID: &str = "nova-control";
+const MODEL: &[u8] = include_bytes!("../../../nova1/model/nova-control.bin");
+
+fn model() -> Option<&'static nova1::Model> {
+    static M: OnceLock<Option<nova1::Model>> = OnceLock::new();
+    M.get_or_init(|| nova1::Model::load(MODEL).ok()).as_ref()
+}
+
+// ----------------------------------------------------------------------------- Texte
+
+fn fold(s: &str) -> String {
+    s.to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'à' | 'â' | 'ä' => 'a',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'î' | 'ï' => 'i',
+            'ô' | 'ö' => 'o',
+            'ù' | 'û' | 'ü' => 'u',
+            'ç' => 'c',
+            '…' => ' ',
+            c => c,
+        })
+        .collect::<String>()
+        .replace("...", " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn levenshtein(a: &str, b: &str) -> usize {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for i in 1..=a.len() {
+        let mut cur = vec![i; b.len() + 1];
+        for j in 1..=b.len() {
+            cur[j] = (prev[j] + 1).min(cur[j - 1] + 1).min(prev[j - 1] + if a[i - 1] == b[j - 1] { 0 } else { 1 });
+        }
+        prev = cur;
+    }
+    prev[b.len()]
+}
+
+/// Ressemblance entre un libellé voulu et un libellé à l'écran (0 à 1).
+fn similarity(want: &str, label: &str) -> f32 {
+    let (w, l) = (fold(want), fold(label));
+    if w.is_empty() || l.is_empty() {
+        return 0.0;
+    }
+    if w == l {
+        return 1.0;
+    }
+    if l.starts_with(&w) || w.starts_with(&l) {
+        return 0.9;
+    }
+    if l.contains(&w) {
+        return 0.8;
+    }
+    let d = levenshtein(&w, &l) as f32 / w.len().max(l.len()) as f32;
+    (1.0 - d).max(0.0) * 0.85
+}
+
+/// Synonymes français / anglais des menus et boutons courants (pour les apps en anglais ou les variantes).
+fn synonyms(word: &str) -> Vec<String> {
+    let groups: &[&[&str]] = &[
+        &["Fichier", "File"], &["Édition", "Edit", "Modifier"], &["Présentation", "Affichage", "View"], &["Fenêtre", "Window"], &["Aide", "Help"],
+        &["Insertion", "Insérer", "Insert"], &["Calque", "Layer"], &["Outils", "Tools"], &["Image", "Image"], &["Filtre", "Filter"],
+        &["Enregistrer sous", "Save As", "Enregistrer une copie", "Save a Copy", "Exporter", "Export", "Exporter sous", "Export As", "Enregistrer", "Save"],
+        &["Exporter", "Export", "Exporter sous", "Export As", "Enregistrer sous", "Save As"],
+        &["Nouveau", "New", "Nouveau document", "New Document"], &["Ouvrir", "Open"], &["Fermer", "Close"], &["Imprimer", "Print"],
+        &["Copier", "Copy"], &["Coller", "Paste"], &["Couper", "Cut"], &["Annuler", "Undo"], &["Préférences", "Réglages", "Preferences", "Settings"],
+        &["Envoyer", "Send"], &["OK", "Valider", "Confirmer"], &["Suivant", "Next", "Continuer", "Continue"], &["Rechercher", "Search", "Chercher"],
+    ];
+    let f = fold(word);
+    let mut out = vec![word.to_string()];
+    for g in groups {
+        if g.iter().any(|x| fold(x) == f) {
+            out.extend(g.iter().map(|x| x.to_string()).filter(|x| fold(x) != f));
+        }
+    }
+    out
+}
+
+/// Découpe une demande en étapes. « et » ne coupe que s'il est suivi d'un verbe d'action.
+pub fn split_steps(goal: &str) -> Vec<String> {
+    let verbs = "ouvre|lance|démarre|demarre|va|enregistre|sauvegarde|exporte|écris|ecris|tape|saisis|clique|appuie|crée|cree|envoie|ferme|quitte|cherche|recherche|copie|colle|coupe|annule|mets|met|fais|baisse|monte|coupe|passe|sélectionne|selectionne|choisis|descends|remonte|note|ajoute";
+    let mut steps = vec![goal.trim().to_string()];
+    let seps = [" puis ", " ensuite ", " et ensuite ", " après ça ", "; ", ". "];
+    for sep in seps {
+        steps = steps.into_iter().flat_map(|s| s.split(sep).map(str::to_string).collect::<Vec<_>>()).collect();
+    }
+    let verb_list: Vec<&str> = verbs.split('|').collect();
+    let mut out = Vec::new();
+    for s in steps {
+        let mut cur = String::new();
+        let words: Vec<&str> = s.split(' ').collect();
+        let mut i = 0;
+        while i < words.len() {
+            let w = words[i];
+            let next = words.get(i + 1).map(|n| fold(n.trim_matches(|c: char| !c.is_alphanumeric())));
+            let splits_here = (w == "et" || w.ends_with(',')) && next.as_deref().map(|n| verb_list.iter().any(|v| fold(v) == n)).unwrap_or(false);
+            if splits_here {
+                if w.ends_with(',') {
+                    cur.push_str(w.trim_end_matches(','));
+                }
+                if !cur.trim().is_empty() {
+                    out.push(cur.trim().to_string());
+                }
+                cur.clear();
+            } else {
+                cur.push_str(w);
+                cur.push(' ');
+            }
+            i += 1;
+        }
+        if !cur.trim().is_empty() {
+            out.push(cur.trim().trim_end_matches(['.', ',']).to_string());
+        }
+    }
+    out.into_iter().filter(|s| !s.is_empty()).collect()
+}
+
+/// Texte libre après un des marqueurs (« écris … », « avec … »), entre guillemets si présents.
+fn after(text: &str, markers: &[&str]) -> Option<String> {
+    if let Some(q) = regex::Regex::new(r#"[«"“]\s*([^»"”]+?)\s*[»"”]"#).unwrap().captures(text) {
+        return Some(q[1].trim().to_string());
+    }
+    let low = text.to_lowercase();
+    for m in markers {
+        if let Some(i) = low.find(m) {
+            let rest = text[i + m.len()..].trim().trim_start_matches(':').trim();
+            if !rest.is_empty() {
+                return Some(rest.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn folder_path(name: &str) -> Option<std::path::PathBuf> {
+    let home = dirs::home_dir()?;
+    let f = fold(name);
+    let sub = if f.contains("bureau") || f.contains("desktop") {
+        "Desktop"
+    } else if f.contains("telecharg") || f.contains("download") {
+        "Downloads"
+    } else if f.contains("image") || f.contains("picture") || f.contains("photo") {
+        "Pictures"
+    } else if f.contains("musique") || f.contains("music") {
+        "Music"
+    } else if f.contains("video") || f.contains("movie") || f.contains("film") {
+        "Movies"
+    } else if f.contains("document") {
+        "Documents"
+    } else {
+        return None;
+    };
+    Some(home.join(sub))
+}
+
+// ----------------------------------------------------------------------------- Exécution
+
+struct Ctx<'a> {
+    state: &'a AppState,
+    app: &'a AppHandle,
+    mode: &'a str,
+    cancel: &'a Cancel,
+    channel: &'a Channel<ControlEvent>,
+    n: usize,
+}
+
+impl Ctx<'_> {
+    fn step(&mut self, action: &str, thought: &str, result: &str, ok: bool) {
+        self.n += 1;
+        let _ = self.channel.send(ControlEvent::Step { n: self.n, thought: thought.into(), action: action.into(), result: result.into(), ok });
+        self.state.db.lock().unwrap().log("nova control", action, if ok { "confirm" } else { "free" }, if ok { "réussi" } else { "échec" });
+    }
+    fn status(&self, t: &str) {
+        let _ = self.channel.send(ControlEvent::Status { text: t.into() });
+    }
+    async fn call(&self, v: Value) -> Result<Value, String> {
+        if self.cancel.is_cancelled() {
+            return Err("cancelled".into());
+        }
+        call(self.app, v).await
+    }
+    /// Accord de l'utilisateur selon le mode (Auto : actions sensibles ; Manuel : tout ; Tout accepter : jamais).
+    async fn allowed(&self, sensitive: bool, title: &str, detail: &str) -> Result<bool, String> {
+        let ask = match self.mode {
+            "accept_all" => false,
+            "ask_all" => true,
+            _ => sensitive,
+        };
+        if !ask {
+            return Ok(true);
+        }
+        let ok = ask_approval(self.app, self.channel, title.into(), detail.into(), self.cancel).await;
+        hide_main(self.app);
+        if self.cancel.is_cancelled() {
+            return Err("cancelled".into());
+        }
+        Ok(ok)
+    }
+    async fn ask(&self, q: &str) -> Result<String, String> {
+        let a = ask_question(self.app, self.channel, q.into(), self.cancel).await.ok_or("cancelled")?;
+        hide_main(self.app);
+        Ok(a)
+    }
+    async fn focus(&self) {
+        let _ = self.call(json!({"cmd": "focus_target"})).await;
+    }
+    async fn observe(&self) -> Result<Value, String> {
+        self.call(json!({"cmd": "observe", "max_elements": 220})).await
+    }
+    async fn pause(&self, ms: u64) {
+        tokio::time::sleep(Duration::from_millis(ms)).await;
+    }
+    async fn key(&self, combo: &str) -> Result<(), String> {
+        self.focus().await;
+        let r = self.call(json!({"cmd": "key", "combo": combo})).await?;
+        if r["error"].is_null() { Ok(()) } else { Err(r["error"].as_str().unwrap_or("raccourci impossible").into()) }
+    }
+}
+
+/// Meilleur élément de l'observation pour un libellé voulu (avec synonymes), au-dessus d'un seuil.
+fn best_element<'v>(obs: &'v Value, want: &str, roles: &[&str]) -> Option<(&'v Value, f32)> {
+    let names = synonyms(want);
+    obs["elements"]
+        .as_array()?
+        .iter()
+        .filter(|e| e["disabled"] != true && (roles.is_empty() || roles.contains(&e["role"].as_str().unwrap_or(""))))
+        .map(|e| {
+            let label = e["label"].as_str().unwrap_or("");
+            let s = names.iter().map(|n| similarity(n, label)).fold(0.0, f32::max);
+            let bonus = if e["role"] == "Button" { 0.03 } else { 0.0 };
+            (e, s + bonus)
+        })
+        .filter(|(_, s)| *s >= 0.62)
+        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+}
+
+async fn press(c: &mut Ctx<'_>, e: &Value, why: &str) -> Result<(), String> {
+    let (x, y) = (e["x"].as_f64().unwrap_or(0.0), e["y"].as_f64().unwrap_or(0.0));
+    let label = e["label"].as_str().unwrap_or("").to_string();
+    move_cursor(c.app, x, y, false, &label);
+    c.pause(140).await;
+    move_cursor(c.app, x, y, true, &label);
+    c.focus().await;
+    let r = c.call(json!({"cmd": "press", "element": e["id"]})).await?;
+    let ok = r["error"].is_null();
+    c.step(&format!("Cliquer sur « {label} »"), why, r["error"].as_str().unwrap_or("ok"), ok);
+    if ok { Ok(()) } else { Err(r["error"].as_str().unwrap_or("clic impossible").into()) }
+}
+
+/// Choisit une commande de menu en essayant les synonymes et le libellé le plus proche proposé par l'app.
+async fn menu(c: &mut Ctx<'_>, path: &[String]) -> Result<(), String> {
+    c.focus().await;
+    let mut candidates: Vec<Vec<String>> = vec![path.to_vec()];
+    if let Some(last) = path.last() {
+        for alt in synonyms(last).into_iter().skip(1) {
+            let mut p = path.to_vec();
+            *p.last_mut().unwrap() = alt;
+            candidates.push(p);
+        }
+    }
+    if let Some(first) = path.first() {
+        for alt in synonyms(first).into_iter().skip(1) {
+            let mut p = path.to_vec();
+            p[0] = alt;
+            candidates.push(p);
+        }
+    }
+    let mut last_err = String::from("menu introuvable");
+    for (i, p) in candidates.iter().enumerate().take(12) {
+        let r = c.call(json!({"cmd": "menu", "path": p})).await?;
+        if r["error"].is_null() {
+            c.step(&format!("Menu {}", p.join(" › ")), if i == 0 { "" } else { "Le premier nom n'existait pas : j'ai essayé une variante." }, "ok", true);
+            return Ok(());
+        }
+        // L'application propose ses vrais intitulés : on prend le plus proche.
+        if let Some(avail) = r["available"].as_array() {
+            let wanted = &p[p.len().min(avail.len().max(1)) - 1];
+            let lvl = p.iter().position(|x| r["error"].as_str().unwrap_or("").contains(x.as_str())).unwrap_or(p.len() - 1);
+            let target = &p[lvl];
+            let _ = wanted;
+            if let Some((best, score)) = avail.iter().filter_map(|a| a.as_str()).map(|a| (a, similarity(target, a))).max_by(|a, b| a.1.partial_cmp(&b.1).unwrap()) {
+                if score >= 0.6 {
+                    let mut q = p.clone();
+                    q[lvl] = best.to_string();
+                    let r2 = c.call(json!({"cmd": "menu", "path": q})).await?;
+                    if r2["error"].is_null() {
+                        c.step(&format!("Menu {}", q.join(" › ")), &format!("« {target} » n'existe pas ici : j'ai choisi « {best} »."), "ok", true);
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        last_err = r["error"].as_str().unwrap_or("menu introuvable").to_string();
+    }
+    Err(last_err)
+}
+
+/// Trouve et clique un bouton ; défile une fois si besoin.
+async fn click_label(c: &mut Ctx<'_>, label: &str) -> Result<(), String> {
+    for attempt in 0..3 {
+        let obs = c.observe().await?;
+        if let Some((e, _)) = best_element(&obs, label, &[]) {
+            let real = e["label"].as_str().unwrap_or(label).to_string();
+            if sensitive_label(&real) && !c.allowed(true, &format!("Cliquer sur « {real} »"), &format!("Dans {} : bouton « {real} ».", obs["app"].as_str().unwrap_or("l'application"))).await? {
+                c.step(&format!("Cliquer sur « {real} »"), "", "Refusé par toi : action non faite.", false);
+                return Ok(());
+            }
+            return press(c, e, if attempt > 0 { "Trouvé après avoir fait défiler." } else { "" }).await;
+        }
+        if attempt == 0 {
+            let _ = c.call(json!({"cmd": "scroll", "dy": -8})).await;
+        } else if attempt == 1 {
+            let _ = c.call(json!({"cmd": "scroll", "dy": 16})).await;
+        }
+        c.pause(250).await;
+    }
+    Err(format!("Je ne trouve pas « {label} » à l'écran."))
+}
+
+async fn open_app(c: &mut Ctx<'_>, name: &str) -> Result<String, String> {
+    let r = c.call(json!({"cmd": "open_app", "name": name})).await?;
+    if r["error"].is_null() {
+        let real = r["app"].as_str().unwrap_or(name).to_string();
+        c.step(&format!("Ouvrir {real}"), "", "ok", true);
+        c.pause(500).await;
+        return Ok(real);
+    }
+    // Nom approximatif : on cherche parmi les applications installées.
+    let found = c.call(json!({"cmd": "find_app", "name": name})).await?;
+    if let Some(best) = found["apps"].as_array().and_then(|a| a.first()).and_then(|v| v.as_str()) {
+        let r2 = c.call(json!({"cmd": "open_app", "name": best})).await?;
+        if r2["error"].is_null() {
+            c.step(&format!("Ouvrir {best}"), &format!("« {name} » n'existe pas tel quel : j'ai trouvé « {best} »."), "ok", true);
+            c.pause(500).await;
+            return Ok(best.to_string());
+        }
+    }
+    let other = c.ask(&format!("Je ne trouve pas l'application « {name} » sur ce Mac. Quel est son nom exact ? (ou « annuler »)")).await?;
+    if fold(&other).starts_with("annul") {
+        return Err(format!("Application « {name} » introuvable."));
+    }
+    Box::pin(open_app(c, &other)).await
+}
+
+/// Enregistrer / exporter avec la boîte de dialogue standard : nom, format, dossier, puis validation.
+async fn save(c: &mut Ctx<'_>, name: Option<String>, format: Option<String>, folder: Option<String>) -> Result<(), String> {
+    c.focus().await;
+    let path: Vec<String> = if format.is_some() { vec!["Fichier".into(), "Enregistrer sous".into()] } else { vec!["Fichier".into(), "Enregistrer".into()] };
+    if menu(c, &path).await.is_err() {
+        // Secours : raccourci clavier universel.
+        c.key(if format.is_some() { "cmd+shift+s" } else { "cmd+s" }).await?;
+        c.step(if format.is_some() { "Raccourci cmd+shift+s (Enregistrer sous)" } else { "Raccourci cmd+s" }, "Le menu n'a pas été trouvé : j'ai utilisé le raccourci.", "ok", true);
+    }
+    c.pause(900).await;
+    let obs = c.observe().await?;
+    let fields: Vec<&Value> = obs["elements"].as_array().map(|a| a.iter().filter(|e| e["role"] == "TextField" && e["secure"] != true).collect()).unwrap_or_default();
+    let has_dialog = !fields.is_empty() || best_element(&obs, "Enregistrer", &["Button"]).is_some();
+    if !has_dialog {
+        c.step("Enregistrer", "Aucune fenêtre d'enregistrement : le document était déjà enregistré.", "ok", true);
+        return Ok(());
+    }
+    if let (Some(n), Some(field)) = (&name, fields.first()) {
+        let r = c.call(json!({"cmd": "set_value", "element": field["id"], "text": n})).await?;
+        c.step(&format!("Nom du fichier : {n}"), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+    }
+    if let Some(fmt) = &format {
+        // Menu déroulant « Format » : on l'ouvre puis on choisit l'entrée qui contient le format voulu.
+        let popup = obs["elements"].as_array().and_then(|a| {
+            a.iter().find(|e| e["role"] == "PopUpButton" && {
+                let l = fold(e["label"].as_str().unwrap_or(""));
+                l.contains("format") || ["png", "jpeg", "jpg", "pdf", "tiff", "gif", "heic", "photoshop", "psd", "webp"].iter().any(|f| l.contains(f))
+            })
+        });
+        match popup {
+            Some(p) => {
+                press(c, p, "J'ouvre la liste des formats.").await?;
+                c.pause(350).await;
+                let o2 = c.observe().await?;
+                match best_element(&o2, fmt, &["MenuItem"]).or_else(|| {
+                    o2["elements"].as_array()?.iter().filter(|e| e["role"] == "MenuItem").find(|e| fold(e["label"].as_str().unwrap_or("")).contains(&fold(fmt))).map(|e| (e, 1.0))
+                }) {
+                    Some((item, _)) => press(c, item, &format!("Format {fmt}.")).await?,
+                    None => {
+                        let _ = c.call(json!({"cmd": "key", "combo": "escape"})).await;
+                        c.step(&format!("Format {fmt}"), "Ce format n'est pas proposé ici.", "format indisponible dans cette fenêtre", false);
+                    }
+                }
+            }
+            None => c.step(&format!("Format {fmt}"), "Pas de choix de format dans cette fenêtre : j'ajoute l'extension au nom.", "ok", true),
+        }
+        if name.is_none() {
+            if let Some(field) = fields.first() {
+                let cur = field["value"].as_str().unwrap_or("").to_string();
+                let base = cur.rsplit_once('.').map(|(b, _)| b.to_string()).unwrap_or(cur);
+                if !base.is_empty() && popup.is_none() {
+                    let _ = c.call(json!({"cmd": "set_value", "element": field["id"], "text": format!("{base}.{}", fmt.to_lowercase())})).await;
+                }
+            }
+        }
+    }
+    if let Some(dir) = folder.as_deref().and_then(folder_path) {
+        // « Aller au dossier » (⌘⇧G) fonctionne dans toutes les fenêtres d'enregistrement de macOS.
+        c.key("cmd+shift+g").await?;
+        c.pause(400).await;
+        let _ = c.call(json!({"cmd": "type", "text": dir.to_string_lossy()})).await;
+        c.pause(200).await;
+        c.key("return").await?;
+        c.step(&format!("Dossier : {}", folder.clone().unwrap_or_default()), "", "ok", true);
+        c.pause(500).await;
+    }
+    // Validation.
+    let o3 = c.observe().await?;
+    let confirm = ["Enregistrer", "Exporter", "Save", "Export", "OK"].iter().find_map(|l| best_element(&o3, l, &["Button"]).filter(|(_, s)| *s >= 0.85).map(|(e, _)| e.clone()));
+    match confirm {
+        Some(btn) => press(c, &btn, "Je valide l'enregistrement.").await?,
+        None => {
+            c.key("return").await?;
+            c.step("Valider (Entrée)", "", "ok", true);
+        }
+    }
+    // Boîtes de dialogue qui suivent : remplacer un fichier existant (accord), options du format (OK).
+    for _ in 0..3 {
+        c.pause(700).await;
+        let o = c.observe().await?;
+        if let Some((rep, _)) = best_element(&o, "Remplacer", &["Button"]).filter(|(_, s)| *s >= 0.85).or_else(|| best_element(&o, "Replace", &["Button"]).filter(|(_, s)| *s >= 0.85)) {
+            if c.allowed(true, "Remplacer le fichier existant", "Un fichier du même nom existe déjà à cet endroit.").await? {
+                let rep = rep.clone();
+                press(c, &rep, "Un fichier du même nom existait.").await?;
+            } else {
+                let _ = c.call(json!({"cmd": "key", "combo": "escape"})).await;
+                c.step("Remplacer le fichier", "", "Refusé par toi : rien n'a été remplacé.", false);
+                return Ok(());
+            }
+            continue;
+        }
+        if let Some((ok, _)) = best_element(&o, "OK", &["Button"]).filter(|(_, s)| *s >= 0.95) {
+            let ok = ok.clone();
+            press(c, &ok, "Options du format : je garde les réglages proposés.").await?;
+            continue;
+        }
+        break;
+    }
+    Ok(())
+}
+
+fn email_in(text: &str) -> Option<String> {
+    regex::Regex::new(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+").unwrap().find(text).map(|m| m.as_str().to_string())
+}
+
+/// Exécute une étape comprise par le modèle. Renvoie l'application concernée (pour les étapes suivantes).
+async fn execute(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<String>) -> Result<(), String> {
+    let p = model().ok_or("Modèle Nova Control indisponible.")?.predict(text);
+    let slots: HashMap<String, String> = p.slots.iter().fold(HashMap::new(), |mut m, (k, v)| {
+        m.entry(k.clone()).and_modify(|x: &mut String| { x.push(' '); x.push_str(v) }).or_insert(v.clone());
+        m
+    });
+    let slot = |k: &str| slots.get(k).cloned();
+    c.status(&format!("« {text} » → {}", p.intent.replace('_', " ")));
+    // « dans Photoshop, … » : on passe d'abord sur la bonne application.
+    if let Some(a) = slot("app") {
+        if p.intent != "ouvrir_app" && p.intent != "fermer_app" && current_app.as_deref().map(|c| fold(c) != fold(&a)).unwrap_or(true) {
+            *current_app = Some(open_app(c, &a).await?);
+        }
+    }
+    match p.intent.as_str() {
+        "ouvrir_app" => {
+            let name = slot("app").or_else(|| after(text, &["ouvre ", "lance ", "démarre ", "va sur ", "va dans ", "passe sur "])).ok_or("Quelle application ouvrir ?")?;
+            *current_app = Some(open_app(c, &name).await?);
+        }
+        "fermer_app" => {
+            let name = slot("app").or_else(|| current_app.clone()).ok_or("Quelle application fermer ?")?;
+            if !c.allowed(true, &format!("Quitter {name}"), "Les documents non enregistrés peuvent être perdus (l'application te le demandera).").await? {
+                c.step(&format!("Quitter {name}"), "", "Refusé par toi.", false);
+                return Ok(());
+            }
+            open_app(c, &name).await?;
+            c.key("cmd+q").await?;
+            c.step(&format!("Quitter {name}"), "", "ok", true);
+        }
+        "ouvrir_site" | "recherche_web" => {
+            let url = if p.intent == "ouvrir_site" {
+                let s = slot("site").or_else(|| after(text, &["sur ", "ouvre ", "site "])).ok_or("Quel site ouvrir ?")?;
+                let s = s.trim().trim_end_matches('/').to_string();
+                if s.starts_with("http") { s } else if s.contains('.') { format!("https://{s}") } else { format!("https://www.{}.com", fold(&s).replace(' ', "")) }
+            } else {
+                let q = slot("requete").or_else(|| after(text, &["cherche ", "recherche ", "google "])).unwrap_or_else(|| text.into());
+                format!("https://www.google.com/search?q={}", urlencoding::encode(&q))
+            };
+            let r = c.call(json!({"cmd": "open_url", "url": url})).await?;
+            c.step(&format!("Ouvrir {url}"), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+        }
+        "nouvelle_note" => {
+            let content = slot("contenu").filter(|s| s.len() > 2).or_else(|| after(text, &[" avec ", " : ", "note "])).unwrap_or_default();
+            let title = slot("titre").unwrap_or_else(|| content.split([',', '.']).next().unwrap_or("Note").chars().take(40).collect());
+            let body = if content.contains(',') { content.split(',').map(|x| format!("• {}", x.trim())).collect::<Vec<_>>().join("\n") } else { content.clone() };
+            let r = c.call(json!({"cmd": "note", "title": title, "body": body})).await?;
+            c.step(&format!("Note « {title} » dans Notes"), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+            *current_app = Some("Notes".into());
+        }
+        "envoyer_mail" => {
+            let mut to = email_in(text).or_else(|| slot("destinataire").filter(|d| d.contains('@')));
+            if to.is_none() {
+                let who = slot("destinataire").unwrap_or_else(|| "ce destinataire".into());
+                let a = c.ask(&format!("Quelle est l'adresse e-mail de {who} ?")).await?;
+                to = email_in(&a);
+            }
+            let to = to.ok_or("Adresse e-mail invalide.")?;
+            let body = slot("message").or_else(|| after(text, &["pour lui dire que ", "pour lui dire ", "pour dire que ", "pour dire ", "disant ", " : ", "message "])).unwrap_or_default();
+            let body = if body.is_empty() { c.ask("Que veux-tu écrire dans ce mail ?").await? } else { body };
+            let subject = slot("objet").unwrap_or_else(|| {
+                let s: String = body.split_whitespace().take(6).collect::<Vec<_>>().join(" ");
+                let mut ch = s.chars();
+                ch.next().map(|f| f.to_uppercase().collect::<String>() + ch.as_str()).unwrap_or_default()
+            });
+            let detail = format!("À : {to}\nObjet : {subject}\n\n{body}");
+            if !c.allowed(true, &format!("Envoyer un e-mail à {to}"), &detail).await? {
+                // Refus : on prépare le brouillon sans l'envoyer.
+                let r = c.call(json!({"cmd": "mail", "to": to, "subject": subject, "body": body, "send": false})).await?;
+                c.step(&format!("Brouillon de mail pour {to}"), "Envoi refusé : je laisse le brouillon ouvert dans Mail.", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+                return Ok(());
+            }
+            let r = c.call(json!({"cmd": "mail", "to": to, "subject": subject, "body": body, "send": true})).await?;
+            c.step(&format!("Envoyer un e-mail à {to}"), "", r["error"].as_str().unwrap_or("envoyé"), r["error"].is_null());
+        }
+        "enregistrer" => {
+            let fmt = slot("format").map(|f| f.to_uppercase().replace("JPG", "JPEG"));
+            save(c, slot("nom"), fmt, slot("dossier")).await?;
+        }
+        "menu" => {
+            let chain = slot("chemin").or_else(|| after(text, &["menu ", "dans "])).ok_or("Quel menu ?")?;
+            let path: Vec<String> = regex::Regex::new(r"\s*(?:puis|>|›|/|,|->)\s*").unwrap().split(&chain).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            menu(c, &path).await?;
+        }
+        "cliquer" => {
+            let label = slot("element").or_else(|| after(text, &["bouton ", "clique sur ", "appuie sur ", "clic sur "])).ok_or("Sur quoi cliquer ?")?;
+            click_label(c, label.trim_matches(|ch: char| "«»\"' ".contains(ch))).await?;
+        }
+        "ecrire" => {
+            let t = after(text, &["écris ", "ecris ", "tape ", "saisis ", "rédige ", "entre ", "écrit "]).or_else(|| slot("texte")).ok_or("Quel texte écrire ?")?;
+            c.focus().await;
+            let r = c.call(json!({"cmd": "type", "text": t})).await?;
+            c.step(&format!("Taper « {t} »"), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+        }
+        "creer_dossier" => {
+            let name = slot("nom").or_else(|| after(text, &["dossier "])).unwrap_or_else(|| "Nouveau dossier".into());
+            let base = slot("dossier").and_then(|d| folder_path(&d)).or_else(|| folder_path("Bureau")).ok_or("Dossier de base introuvable.")?;
+            let dir = base.join(name.trim());
+            let res = std::fs::create_dir_all(&dir);
+            let _ = std::process::Command::new("/usr/bin/open").arg("-R").arg(&dir).status();
+            c.step(&format!("Créer le dossier « {} »", name.trim()), &dir.to_string_lossy(), res.as_ref().map(|_| "ok".to_string()).unwrap_or_else(|e| e.to_string()).as_str(), res.is_ok());
+        }
+        "volume" => {
+            let lvl: i64 = slot("niveau").and_then(|v| v.trim_end_matches('%').trim().parse().ok()).unwrap_or(50);
+            let r = c.call(json!({"cmd": "volume", "level": lvl})).await?;
+            c.step(&format!("Volume à {lvl} %"), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+        }
+        "muet" => {
+            let r = c.call(json!({"cmd": "volume", "mute": true})).await?;
+            c.step("Couper le son", "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+        }
+        "lecture_pause" | "piste_suivante" => {
+            let next = p.intent == "piste_suivante";
+            c.call(json!({"cmd": "media", "key": if next { "next" } else { "play" }})).await?;
+            c.step(if next { "Piste suivante" } else { "Lecture / pause" }, "", "ok", true);
+        }
+        "rechercher_page" => {
+            let t = slot("texte").or_else(|| after(text, &["cherche ", "trouve ", "mot "])).unwrap_or_default();
+            c.key("cmd+f").await?;
+            c.pause(300).await;
+            let _ = c.call(json!({"cmd": "type", "text": t})).await;
+            c.key("return").await?;
+            c.step(&format!("Rechercher « {t} » dans la page"), "", "ok", true);
+        }
+        "defiler" => {
+            let up = slot("direction").map(|d| fold(&d).contains("haut")).unwrap_or(false) || fold(text).contains("remonte");
+            c.call(json!({"cmd": "scroll", "dy": if up { 10 } else { -10 }})).await?;
+            c.step(if up { "Défiler vers le haut" } else { "Défiler vers le bas" }, "", "ok", true);
+        }
+        k @ ("copier" | "coller" | "couper" | "annuler" | "retablir" | "tout_selectionner" | "nouvel_onglet" | "fermer_onglet" | "nouveau_document" | "capture_ecran" | "plein_ecran") => {
+            let (combo, label) = match k {
+                "copier" => ("cmd+c", "Copier"),
+                "coller" => ("cmd+v", "Coller"),
+                "couper" => ("cmd+x", "Couper"),
+                "annuler" => ("cmd+z", "Annuler"),
+                "retablir" => ("cmd+shift+z", "Rétablir"),
+                "tout_selectionner" => ("cmd+a", "Tout sélectionner"),
+                "nouvel_onglet" => ("cmd+t", "Nouvel onglet"),
+                "fermer_onglet" => ("cmd+w", "Fermer l'onglet"),
+                "nouveau_document" => ("cmd+n", "Nouveau document"),
+                "capture_ecran" => ("cmd+shift+3", "Capture d'écran"),
+                _ => ("ctrl+cmd+f", "Plein écran"),
+            };
+            if sensitive_combo(combo) && !c.allowed(true, label, &format!("Raccourci {combo}.")).await? {
+                c.step(label, "", "Refusé par toi.", false);
+                return Ok(());
+            }
+            c.key(combo).await?;
+            c.step(&format!("{label} ({combo})"), "", "ok", true);
+        }
+        _ => {
+            return Err(format!(
+                "Je ne sais pas encore faire « {text} ». Nova Control sait : ouvrir/fermer des applications et des sites, chercher sur le web, créer des notes et des dossiers, envoyer des e-mails, enregistrer/exporter, choisir dans les menus, cliquer sur un bouton, écrire, les raccourcis (copier, coller, annuler, onglets…), le volume et la musique."
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Accomplit la tâche avec le cerveau intégré. Renvoie (résumé, nombre d'actions).
+pub async fn run(state: &AppState, app: &AppHandle, goal: &str, mode: &str, cancel: &Cancel, channel: &Channel<ControlEvent>) -> Result<(String, usize), String> {
+    let steps = split_steps(goal);
+    let mut c = Ctx { state, app, mode, cancel, channel, n: 0 };
+    let mut current_app: Option<String> = None;
+    for (i, s) in steps.iter().enumerate() {
+        if cancel.is_cancelled() {
+            return Err("cancelled".into());
+        }
+        if let Err(e) = execute(&mut c, s, &mut current_app).await {
+            if e == "cancelled" {
+                return Err(e);
+            }
+            c.step(s, "", &e, false);
+            return Ok((format!("Arrêt à l'étape {} sur {} : {e}", i + 1, steps.len()), c.n));
+        }
+        c.pause(250).await;
+    }
+    Ok((if steps.len() > 1 { format!("Terminé : {} étapes réalisées.", steps.len()) } else { "Terminé.".into() }, c.n))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn splits_multi_step_requests() {
+        assert_eq!(split_steps("ouvre Photoshop et enregistre l'image en PNG sur le Bureau"), vec!["ouvre Photoshop", "enregistre l'image en PNG sur le Bureau"]);
+        assert_eq!(split_steps("crée une note Courses avec pain et lait"), vec!["crée une note Courses avec pain et lait"]);
+        assert_eq!(split_steps("ouvre Safari puis va sur youtube.com, puis cherche Nova"), vec!["ouvre Safari", "va sur youtube.com", "cherche Nova"]);
+    }
+
+    #[test]
+    fn understands_tasks() {
+        let m = model().expect("modèle intégré");
+        assert_eq!(m.predict("ouvre Photoshop").intent, "ouvrir_app");
+        assert_eq!(m.predict("enregistre l'image en PNG sur le Bureau").intent, "enregistrer");
+        assert_eq!(m.predict("envoie un mail à paul@exemple.fr pour dire que j'arrive").intent, "envoyer_mail");
+        assert_eq!(m.predict("clique sur Envoyer").intent, "cliquer");
+        assert_eq!(after("écris « bonjour à tous »", &["écris "]).as_deref(), Some("bonjour à tous"));
+        assert_eq!(email_in("à paul@exemple.fr pour"), Some("paul@exemple.fr".into()));
+        assert!(similarity("Enregistrer sous", "Enregistrer sous…") > 0.85);
+        assert!(synonyms("Fichier").contains(&"File".to_string()));
+    }
+}

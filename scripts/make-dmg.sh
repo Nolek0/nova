@@ -44,8 +44,15 @@ if [[ "$LEAKS" != "0" ]]; then
   exit 1
 fi
 
-echo "→ Signature locale…"
-codesign --force --deep --sign - --timestamp=none "$APP"
+# Signature : certificat stable « NOVA Dev » s'il existe dans le trousseau (macOS garde alors les
+# autorisations d'Accessibilité et d'Enregistrement de l'écran d'une version à l'autre), sinon signature locale.
+SIGN_ID="${NOVA_SIGN_ID:-NOVA Dev}"
+if security find-certificate -c "$SIGN_ID" >/dev/null 2>&1 && codesign --force --deep --sign "$SIGN_ID" --timestamp=none "$APP" 2>/dev/null; then
+  echo "→ Signé avec le certificat « $SIGN_ID » (autorisations conservées entre les versions)"
+else
+  echo "→ Signature locale (sans certificat : macOS redemandera les autorisations après chaque version)"
+  codesign --force --deep --sign - --timestamp=none "$APP"
+fi
 codesign --verify --deep --strict "$APP"
 
 echo "→ Création du DMG…"
