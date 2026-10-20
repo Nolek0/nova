@@ -218,6 +218,31 @@ enum ControlSession {
             // « Regarder l'écran » comme un humain : capture + reconnaissance du texte (sur l'appareil).
             // Renvoie chaque ligne de texte lue avec sa position à l'écran (points).
             return readScreen()
+        case "music":
+            // Recettes musique (Spotify ou Musique d'Apple) : aléatoire + lecture, lecture, pause, suivant, précédent, état.
+            let app = (r["app"] as? String ?? "Spotify") == "Music" ? "Music" : "Spotify"
+            let shuffle = app == "Spotify" ? "set shuffling to true" : "set shuffle enabled to true"
+            let op = r["op"] as? String ?? "play"
+            let body: String
+            switch op {
+            case "shuffle": body = "\(shuffle)\nplay"
+            case "pause": body = "pause"
+            case "next": body = "next track"
+            case "previous": body = "previous track"
+            case "state": body = ""
+            default: body = "play"
+            }
+            let script = "tell application \"\(app)\"\n\(body)\nreturn (player state as string)\nend tell"
+            var error: NSDictionary?
+            let sem = DispatchSemaphore(value: 0)
+            nonisolated(unsafe) var state = ""
+            DispatchQueue.main.async {
+                state = NSAppleScript(source: script)?.executeAndReturnError(&error).stringValue ?? ""
+                sem.signal()
+            }
+            sem.wait()
+            if let e = error { return ["error": (e[NSAppleScript.errorMessage] as? String) ?? "Commande refusée par \(app).", "app": app] }
+            return ["ok": true, "state": state, "app": app]
         case "find_app":
             return ["apps": installedApps(matching: r["name"] as? String ?? "")]
         case "mail":

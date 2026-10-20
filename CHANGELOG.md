@@ -2,6 +2,17 @@
 
 All notable changes to NOVA are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.4.8] — 2026-10-20
+
+### Added
+- **Detailed plans from the local AI**: the chat model on the Mac (Gemma 4, the Apple model…) now breaks a request into small, verifiable steps written in free-form language — not only a fixed list of actions. Implicit intents are understood (“put on some music” = any song, shuffled).
+- **Free-form steps**: for a step with no built-in skill, Nova Control asks the local model for one action at a time (click an element, type, shortcut, menu, scroll…), looking at the interface and, with a vision model, at a screenshot — until the step is done (8 actions at most). Sensitive clicks and shortcuts still ask for approval.
+- **Music**: “open Spotify and play some music”, pause, next, previous — directly in Spotify or Apple Music, then checks that a song is actually playing. “Play Drake on Spotify” searches and plays the first result.
+- **Sees the screen when stuck**: when a button can't be found in the interface or by reading the screen (e.g. Discord's GIF button), the vision model looks at a screenshot, says where to click, and Nova Control checks that the screen reacted.
+
+### Changed
+- **Self-correction**: when a planned step fails, Nova Control looks at the screen and tries another way with the local model before moving on.
+
 ## [0.4.7] — 2026-10-20
 
 ### Added
