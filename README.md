@@ -124,6 +124,11 @@ Nova 1 does not hold open conversations; that is what the chat models are for. I
 - **Menu-bar mini chat**: click the NOVA icon and read the answer in a floating panel
 - Native menu bar, dictation with on-device speech recognition
 
+### 📱 On iPhone
+- **NOVA for iPhone** ([`ios/`](ios/README.md)): chat, Nova Control and your Mac's **screen remotely** (tap to click, keyboard, scroll), with notifications to approve or answer Nova Control
+- Connects straight to your computer: found automatically on home Wi-Fi, or through Tailscale when away. No server, no account, paired with a 6-digit code
+- Free to install with Xcode or SideStore, no App Store needed
+
 ### 🌍 Languages
 - The interface follows your **system language** by default:
   - English, Français, Español, Português, Deutsch, Italiano, Nederlands;
@@ -169,6 +174,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | [`app/src-tauri`](app/src-tauri) | Rust core (Tauri 2): commands, router, tools, Nova 1 integration, storage, engine manager, notch island |
 | [`app/ui`](app/ui) | User interface (vanilla JS modules, vendored libraries, translations in `js/locales/`) |
 | [`apple`](apple) | Swift package for the macOS helper: Apple model, OCR, video reading, camera, dictation |
+| [`ios`](ios) | **NOVA for iPhone** (SwiftUI): chat, Nova Control and remote screen, talking to the desktop app |
 | [`nova1`](nova1) | **Nova 1**: text and vision models, training programs and training data generator |
 | [`scripts`](scripts) | Build, DMG and release scripts |
 | [`docs`](docs) | Documentation |

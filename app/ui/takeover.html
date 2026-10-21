@@ -5,7 +5,7 @@
   <title>Nova Control</title>
   <link rel="stylesheet" href="css/app.css">
   <style>
-    /* Animation obligatoire quand Nova Control prend la main : sort de l'encoche, 3 s, puis y retourne. */
+    /* Sort de l'encoche quand Nova Control prend la main (3 s), ou reste ouverte tant que l'iPhone contrôle le Mac. */
     html, body { margin: 0; height: 100%; background: transparent !important; overflow: hidden; pointer-events: none; }
     .pill { --nw: 190px; --nh: 32px; position: absolute; left: 50%; top: 0; transform: translateX(-50%);
       width: var(--nw); height: var(--nh); background: #000; border-radius: 0 0 12px 12px; overflow: hidden;
@@ -29,16 +29,24 @@
   </style>
 </head>
 <body>
-  <div class="pill" id="pill"><div class="content"><span class="mark"></span><span>Nova Control prend la main</span><span class="dot"></span></div></div>
+  <div class="pill" id="pill"><div class="content"><span class="mark"></span><span id="text">Nova Control prend la main</span><span class="dot"></span></div></div>
   <script>
     const pill = document.getElementById('pill');
     window.__TAURI__.event.listen('takeover', (e) => {
       const g = e.payload || {};
       if (g.nw) pill.style.setProperty('--nw', g.nw + 'px');
       if (g.nh) pill.style.setProperty('--nh', g.nh + 'px');
+      if (g.text) document.getElementById('text').textContent = g.text;
+      pill.classList.remove('gone');
       requestAnimationFrame(() => requestAnimationFrame(() => pill.classList.add('open')));
+      // `stay` : la pastille reste ouverte (l'iPhone contrôle le Mac) jusqu'à « takeover-end ».
+      if (g.stay) return;
       setTimeout(() => pill.classList.remove('open'), 2500);
       setTimeout(() => pill.classList.add('gone'), 3000);
+    });
+    window.__TAURI__.event.listen('takeover-end', () => {
+      pill.classList.remove('open');
+      setTimeout(() => pill.classList.add('gone'), 500);
     });
   </script>
 </body>

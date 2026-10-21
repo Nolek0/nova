@@ -1,5 +1,5 @@
 // Paramètres : chaque changement est enregistré immédiatement (SQLite local).
-import { invoke, dialog, esc, el, toast, errorText, confirmDialog } from '../api.js';
+import { invoke, listen, dialog, esc, el, toast, errorText, confirmDialog } from '../api.js';
 import { icon } from '../icons.js';
 import { folders, addFolder, removeFolder } from './files.js';
 import { UI_LANGUAGES, REPLY_LANGUAGES } from '../i18n.js';
@@ -69,6 +69,38 @@ export function render(v, ctx) {
     await ctx.setSetting('notchIsland', islBox.checked ? '1' : '0');
     try { await invoke('set_notch_island', { enabled: islBox.checked }); } catch (e) { toast(errorText(e), 'error'); }
   };
+
+  // Téléphone (app NOVA pour iPhone)
+  const ph = group('Téléphone', 'phone', `<label class="row"><input type="checkbox" id="phon"> Utiliser NOVA depuis mon iPhone (discussion, Nova Control${ctx.isMac() ? ', écran à distance' : ''})</label>
+    <div class="faint">Le téléphone se connecte directement à cet ordinateur, sans serveur ni compte. À la maison, il le trouve tout seul sur le Wi-Fi. Ailleurs, installe Tailscale (gratuit) sur les deux appareils.</div>
+    <div id="phinfo" class="stack hidden"></div>`);
+  const phBox = ph.querySelector('#phon'), phInfo = ph.querySelector('#phinfo');
+  const showPhone = (st) => {
+    phBox.checked = st.enabled;
+    phInfo.classList.toggle('hidden', !st.enabled);
+    if (!st.enabled) return;
+    const devices = (st.paired || '').split('\n').filter(Boolean);
+    phInfo.innerHTML = `<div class="row" style="gap:16px;align-items:center"><div><div class="faint">Code d'appairage</div><div style="font-size:30px;font-weight:700;letter-spacing:6px;font-variant-numeric:tabular-nums">${esc(st.pin.slice(0, 3))} ${esc(st.pin.slice(3))}</div></div>
+      <div class="faint" style="flex:1">Dans l'app NOVA sur l'iPhone, choisis « ${esc(st.name)} » puis tape ce code. Il change après chaque appairage et au bout de 10 minutes.</div></div>
+      <div class="faint">Adresse à saisir si l'ordinateur n'apparaît pas : ${st.addresses.map((a) => `<code>${esc(a)}</code>`).join(' ou ') || '—'} (port ${st.port})</div>
+      <div class="row"><span class="faint grow">${devices.length ? `Téléphones connectés : ${devices.map(esc).join(', ')}` : 'Aucun téléphone connecté pour l’instant.'}</span>
+      <button class="btn" id="phpin">${icon('refresh')} Nouveau code</button>${devices.length ? `<button class="btn" id="phforget">${icon('x')} Déconnecter les téléphones</button>` : ''}</div>`;
+    phInfo.querySelector('#phpin').onclick = () => invoke('remote_reset', { forget: false }).then(showPhone);
+    const forget = phInfo.querySelector('#phforget');
+    if (forget) forget.onclick = async () => {
+      if (await confirmDialog('Les téléphones devront taper un nouveau code pour se reconnecter.')) showPhone(await invoke('remote_reset', { forget: true }));
+    };
+  };
+  invoke('remote_status').then(showPhone).catch(() => {});
+  // Le code expire au bout de 10 minutes : on affiche toujours le code valable tant que la page est ouverte.
+  const phTimer = setInterval(() => {
+    if (!ph.isConnected) return clearInterval(phTimer);
+    if (phBox.checked) invoke('remote_status').then(showPhone).catch(() => {});
+  }, 30000);
+  phBox.onchange = async () => {
+    try { showPhone(await invoke('remote_enable', { on: phBox.checked })); } catch (e) { phBox.checked = false; toast(errorText(e), 'error'); }
+  };
+  listen('remote-paired', (e) => { toast(`${e.payload} est connecté à NOVA.`); invoke('remote_status').then(showPhone); });
 
   // Personnalisation
   const pe = group('Personnalisation', 'pencil', `<div class="row"><span style="width:150px">Ton prénom</span><input class="field" id="name" placeholder="Facultatif" style="width:240px"></div>

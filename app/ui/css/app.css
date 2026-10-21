@@ -362,7 +362,7 @@ canvas.plot { width: 100%; height: 340px; display: block; }
 .code-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--violet); background: color-mix(in srgb, var(--violet) 14%, transparent); padding: 3px 9px; border-radius: 999px; }
 .code-badge svg { width: 13px; height: 13px; }
 .code-proj { font-size: 13.5px; }
-.code-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(320px, 400px); }
+.code-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(320px, 400px); grid-template-rows: minmax(0, 1fr); }
 .code-tree { overflow: auto; border-right: 1px solid var(--border); padding: 8px 6px; }
 .tree-row { display: flex; align-items: center; gap: 6px; width: 100%; height: 26px; border: 0; background: none; color: var(--text-2); font: inherit; font-size: 12.5px; text-align: left; border-radius: 6px; cursor: pointer; white-space: nowrap; }
 .tree-row:hover { background: var(--hover); color: var(--text); }
@@ -377,8 +377,8 @@ canvas.plot { width: 100%; height: 340px; display: block; }
 .file-body .gutter { flex: none; padding: 10px 10px 10px 14px; text-align: right; color: var(--text-3); user-select: none; border-right: 1px solid var(--border); }
 .file-body .src { flex: 1; padding-left: 14px; }
 .file-body .src code { background: none; padding: 0; }
-.code-chat { min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); }
-.code-msgs { flex: 1; overflow: auto; padding: 14px; display: grid; gap: 14px; align-content: start; }
+.code-chat { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; border-left: 1px solid var(--border); }
+.code-msgs { flex: 1; min-height: 0; overflow: auto; padding: 14px; display: grid; gap: 14px; align-content: start; }
 .c-msg.user { justify-self: end; max-width: 90%; }
 .c-msg.user .bubble { background: var(--raised); padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; font-size: 13px; }
 .c-msg.ai { font-size: 13px; min-width: 0; }

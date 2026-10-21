@@ -17,6 +17,24 @@ const EXAMPLES = [
   'Ouvre Safari et va sur wikipedia.org',
 ];
 
+/** Cerveaux possibles pour Nova Control (page Nova Control et bouton « Contrôle » des conversations). */
+export async function brains(ctx) {
+  const list = [{ id: 'nova-control', label: 'Nova Control · intégré, ultra rapide' }];
+  try {
+    const o = await invoke('models_overview');
+    const usable = o.available.filter((m) => m.provider !== 'nova1');
+    const chat = usable.find((m) => m.id === ctx.state.settings.model) || usable.find((m) => m.provider === 'llama') || usable[0];
+    if (chat) list.push({ id: 'nova-control-llm', label: `Nova Control + ${chat.name} · comprend mieux les demandes libres` });
+    usable.filter((m) => m.vision).forEach((m) => list.push({ id: m.id, label: `${m.name} · mode avancé (plus lent)` }));
+  } catch {}
+  return list;
+}
+
+export function currentBrain(ctx, list) {
+  const pref = ctx.state.settings.controlModel;
+  return list.some((b) => b.id === pref) ? pref : 'nova-control';
+}
+
 export async function render(v, ctx) {
   const page = el(`<div class="page control"><h1>${icon('power')} Nova Control</h1>
     <p class="sub">Décris une tâche : Nova Control la réalise sur ton Mac, étape par étape, avec le curseur bleu. Tout reste sur ton ordinateur. Les actions sensibles (envoyer, supprimer, acheter, publier…) attendent ton accord. <b>Échap</b> arrête tout à tout moment.</p>
@@ -39,16 +57,12 @@ export async function render(v, ctx) {
     b.onclick = () => { goal.value = S.goal = x; goal.focus(); };
     page.querySelector('#ex').appendChild(b);
   });
-  // Modèles : ceux qui voient les images d'abord.
+  // Cerveaux : Nova Control seul (par défaut), aidé par le modèle de conversation, ou un modèle de vision (mode avancé).
   try {
-    const o = await invoke('models_overview');
-    const list = o.available.filter((m) => m.provider !== 'nova1' && m.vision);
+    const list = await brains(ctx);
     const sel = page.querySelector('#model');
-    // Cerveau intégré par défaut (aucun téléchargement) ; les modèles de vision installés en mode avancé.
-    sel.appendChild(el('<option value="nova-control">Nova Control · intégré, ultra rapide</option>'));
-    list.forEach((m) => sel.appendChild(el(`<option value="${esc(m.id)}">${esc(m.name)} · mode avancé (plus lent)</option>`)));
-    const pref = ctx.state.settings.controlModel;
-    sel.value = pref && list.some((m) => m.id === pref) ? pref : 'nova-control';
+    list.forEach((b) => sel.appendChild(el(`<option value="${esc(b.id)}">${esc(b.label)}</option>`)));
+    sel.value = currentBrain(ctx, list);
     sel.onchange = () => ctx.setSetting('controlModel', sel.value);
   } catch {}
   const modeSel = page.querySelector('#mode');

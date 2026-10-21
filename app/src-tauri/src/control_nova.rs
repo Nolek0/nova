@@ -18,6 +18,8 @@ use tauri::ipc::Channel;
 use tauri::AppHandle;
 
 pub const BRAIN_ID: &str = "nova-control";
+/// Cerveau intégré aidé par le modèle de conversation installé (Gemma…) pour comprendre les demandes libres.
+pub const BRAIN_LLM_ID: &str = "nova-control-llm";
 const MODEL: &[u8] = include_bytes!("../../../nova1/model/nova-control.bin");
 
 fn model() -> Option<&'static nova1::Model> {
@@ -1415,7 +1417,7 @@ async fn send_gif(c: &mut Ctx<'_>, chat: &Chat, who: &str, query: &str) -> Resul
 /// copie, réécriture, aperçu soumis à ton accord, puis remplacement.
 async fn transform_open_text(c: &mut Ctx<'_>, consigne: &str) -> Result<(), String> {
     let Some(model) = c.llm.clone() else {
-        return Err("Pour transformer un texte, il faut un modèle de conversation installé (Gemma 4, page Modèles).".into());
+        return Err("Pour transformer un texte, choisis le cerveau « Nova Control + modèle de conversation » (il faut un modèle comme Gemma 4, page Modèles).".into());
     };
     c.focus().await;
     c.pause(400).await;
@@ -1482,7 +1484,7 @@ Règles : une seule action par réponse ; vérifie que l'action précédente a m
 /// (éléments de l'interface, et capture d'écran si le modèle voit les images), 8 actions au plus.
 async fn free_step(c: &mut Ctx<'_>, instruction: &str) -> Result<(), String> {
     let Some(model) = c.vision.clone().or_else(|| c.llm.clone()) else {
-        return Err(format!("Je ne sais pas faire « {instruction} » sans modèle de langage installé (page Modèles)."));
+        return Err(format!("Je ne sais pas faire « {instruction} » seul : choisis le cerveau « Nova Control + modèle de conversation » pour les tâches libres."));
     };
     let shot = std::env::temp_dir().join(format!("nova-step-{}.jpg", uuid::Uuid::new_v4()));
     let mut history: Vec<String> = Vec::new();
@@ -2109,15 +2111,19 @@ pub fn merge_followups(steps: Vec<String>) -> Vec<String> {
     out
 }
 
-pub async fn run(state: &AppState, app: &AppHandle, goal: &str, mode: &str, cancel: &Cancel, channel: &Channel<ControlEvent>) -> Result<(String, usize), String> {
+/// `use_llm` : le modèle de conversation local (Gemma…) aide à comprendre la demande, à faire les étapes libres
+/// et à regarder l'écran ; sinon Nova Control travaille seul (règles intégrées, instantané).
+pub async fn run(state: &AppState, app: &AppHandle, goal: &str, mode: &str, use_llm: bool, cancel: &Cancel, channel: &Channel<ControlEvent>) -> Result<(String, usize), String> {
     let fallback_steps = merge_followups(split_steps(goal));
     let mut c = Ctx { state, app, mode, cancel, channel, n: 0, last_subject: None, last_message: None, llm: None, vision: None, goal: goal.to_string() };
     let mut current_app: Option<String> = None;
     // 1. Comprendre la demande avec le modèle de langage local (s'il y en a un).
-    c.llm = pick_llm(state).await;
-    c.vision = if c.llm.as_ref().map(|m| m.vision).unwrap_or(false) { c.llm.clone() } else {
-        state.available_models().await.into_iter().find(|m| m.vision && m.provider != "nova1")
-    };
+    if use_llm {
+        c.llm = pick_llm(state).await;
+        c.vision = if c.llm.as_ref().map(|m| m.vision).unwrap_or(false) { c.llm.clone() } else {
+            state.available_models().await.into_iter().find(|m| m.vision && m.provider != "nova1")
+        };
+    }
     let planned = understand(&mut c, goal).await;
     if let Some(plan) = &planned {
         let mut failed: Vec<String> = Vec::new();

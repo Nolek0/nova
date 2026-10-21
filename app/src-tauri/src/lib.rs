@@ -13,6 +13,7 @@ pub mod island;
 pub mod llm;
 pub mod math;
 pub mod nova;
+pub mod remote;
 #[cfg(target_os = "macos")]
 pub mod menubar;
 pub mod tools;
@@ -825,6 +826,7 @@ pub fn run() {
                 }
             }
             appmenu::install(app.handle(), &HashMap::new())?;
+            remote::autostart(app.handle());
             Ok(())
         })
         .on_menu_event(|app, event| {
@@ -862,6 +864,7 @@ pub fn run() {
             weather, search_places, set_allowed_folders, search_files, open_path, open_url, system_info,
             export_data, delete_all_conversations, activity_log, clear_activity, dictation_start, dictation_stop,
             math_eval, math_run, units_catalog, units_convert, stats_describe, probabilities, matrix_op, plot,
+            remote::remote_status, remote::remote_enable, remote::remote_reset,
             #[cfg(target_os = "macos")]
             menubar::quick_submit,
             #[cfg(target_os = "macos")]
@@ -906,7 +909,8 @@ pub fn run() {
                 menubar::show_main(app);
             }
             if let tauri::RunEvent::Exit = event {
-                // Arrête llama-server à la fermeture.
+                // Arrête llama-server et la télécommande à la fermeture.
+                remote::stop();
                 let state = app.state::<AppState>();
                 tauri::async_runtime::block_on(state.engine.stop());
             }

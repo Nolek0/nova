@@ -210,11 +210,43 @@ unsafe impl Encode for Insets {
 /// Animation obligatoire dans l'encoche quand Nova Control prend la main (3 s, aucun clic possible).
 /// Sur un Mac sans encoche (ou un écran externe), elle apparaît en haut au centre de l'écran principal.
 fn show_takeover(app: &AppHandle) {
+    show_notch_banner(app, "control-notch", "Nova Control prend la main", false);
+}
+
+/// Bandeau qui reste dans l'encoche tant que l'iPhone contrôle le Mac (voir remote.rs).
+pub(crate) fn show_remote_banner(app: &AppHandle, on: bool) {
+    // Chaque ouverture annule une fermeture encore en cours (session relancée aussitôt).
+    let gen = BANNER_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    if on {
+        if let Some(w) = app.get_webview_window("remote-notch") {
+            let _ = w.emit_to("remote-notch", "takeover", json!({"text": "L'iPhone contrôle le Mac", "stay": true}));
+            return;
+        }
+        show_notch_banner(app, "remote-notch", "L'iPhone contrôle le Mac", true);
+    } else if let Some(w) = app.get_webview_window("remote-notch") {
+        // L'animation se referme dans l'encoche, puis la fenêtre disparaît.
+        let _ = w.emit_to("remote-notch", "takeover-end", ());
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(900));
+            if BANNER_GEN.load(Ordering::SeqCst) == gen {
+                let _ = w.destroy();
+            }
+        });
+    }
+}
+
+static BANNER_GEN: AtomicU64 = AtomicU64::new(0);
+
+/// Pastille qui sort de l'encoche avec un texte ; `stay` : elle reste ouverte jusqu'à `takeover-end`.
+fn show_notch_banner(app: &AppHandle, label: &'static str, text: &'static str, stay: bool) {
     const W: f64 = 440.0;
     const H: f64 = 110.0;
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        if let Some(w) = handle.get_webview_window("control-notch") {
+        if let Some(w) = handle.get_webview_window(label) {
+            if stay {
+                return;
+            }
             let _ = w.destroy();
         }
         // Écran avec encoche (sinon écran principal) et taille de l'encoche.
@@ -243,7 +275,7 @@ fn show_takeover(app: &AppHandle) {
                 (f, 180.0, 26.0)
             })
         };
-        let Ok(win) = WebviewWindowBuilder::new(&handle, "control-notch", WebviewUrl::App("takeover.html".into()))
+        let Ok(win) = WebviewWindowBuilder::new(&handle, label, WebviewUrl::App("takeover.html".into()))
             .title("Nova Control")
             .decorations(false)
             .transparent(true)
@@ -273,15 +305,19 @@ fn show_takeover(app: &AppHandle) {
         let w2 = win.clone();
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(400));
-            let _ = w2.emit_to("control-notch", "takeover", json!({"nw": nw, "nh": nh}));
-            std::thread::sleep(Duration::from_millis(3700));
-            let _ = w2.destroy();
+            let _ = w2.emit_to(label, "takeover", json!({"nw": nw, "nh": nh, "text": text, "stay": stay}));
+            if !stay {
+                std::thread::sleep(Duration::from_millis(3700));
+                let _ = w2.destroy();
+            }
         });
     });
 }
 
 /// Carte flottante en bas à droite de l'écran : questions et demandes d'accord sans faire apparaître NOVA.
 fn show_prompt(app: &AppHandle, payload: Value) {
+    // Le téléphone appairé reçoit aussi la demande (notification).
+    crate::remote::notify(payload.clone());
     const W: f64 = 400.0;
     const H: f64 = 250.0;
     let handle = app.clone();
@@ -822,8 +858,10 @@ pub async fn control_start(state: State<'_, AppState>, app: AppHandle, goal: Str
         return Err("Nova Control est déjà en train de travailler.".into());
     }
     let mode = mode.unwrap_or_else(|| "auto".into());
-    // Cerveau intégré (par défaut) : le modèle Nova Control, sans téléchargement.
-    if model_id.as_deref().map(|m| m == crate::control_nova::BRAIN_ID).unwrap_or(true) {
+    // Cerveau intégré : seul (« nova-control », par défaut) ou aidé par le modèle de conversation (« nova-control-llm »).
+    let builtin = model_id.as_deref().map(|m| m == crate::control_nova::BRAIN_ID || m == crate::control_nova::BRAIN_LLM_ID).unwrap_or(true);
+    let use_llm = model_id.as_deref() == Some(crate::control_nova::BRAIN_LLM_ID);
+    if builtin {
         let cancel = Cancel::default();
         *CURRENT.lock().unwrap() = Some(cancel.clone());
         state.db.lock().unwrap().log("nova control", &format!("Tâche : {goal}"), "confirm", "démarrée");
@@ -838,7 +876,7 @@ pub async fn control_start(state: State<'_, AppState>, app: AppHandle, goal: Str
             // NOVA reste où il est : les applications pilotées passent d'elles-mêmes au premier plan.
             // Le temps que les fenêtres du curseur néon soient prêtes (sinon les premiers mouvements sont perdus).
             tokio::time::sleep(Duration::from_millis(1100)).await;
-            crate::control_nova::run(&state, &app, &goal, &mode, &cancel, &on_event).await
+            crate::control_nova::run(&state, &app, &goal, &mode, use_llm, &cancel, &on_event).await
         }
         .await;
         *CURRENT.lock().unwrap() = None;

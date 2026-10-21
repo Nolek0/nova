@@ -503,7 +503,7 @@ function buildComposer(placeholder = 'Écris à NOVA…') {
   const ctl = c.querySelector('[data-act=control]');
   if (ctl) {
     ctl.classList.toggle('on', !!state.control);
-    ctl.onclick = () => { state.control = !state.control; ctl.classList.toggle('on', state.control); };
+    ctl.onclick = () => { state.control = !state.control; ctl.classList.toggle('on', state.control); renderComposerModel(); };
   }
   const think = c.querySelector('[data-act=think]');
   think.classList.toggle('on', state.settings.thinking === '1');
@@ -550,15 +550,31 @@ function selectedModel() {
   return state.models.find((m) => m.id === state.settings.model) || state.models[0];
 }
 
-function renderComposerModel() {
+async function renderComposerModel() {
   const b = $('#composer [data-act=model]');
   if (!b) return;
+  // Mode Contrôle : le bouton choisit le cerveau de Nova Control (et non le modèle de conversation).
+  if (state.control && isMac()) {
+    const list = await Control.brains(ctxFor());
+    const cur = list.find((x) => x.id === Control.currentBrain(ctxFor(), list));
+    b.innerHTML = `${icon('power')}<span>${esc(cur.label.split(' · ')[0])}</span>${icon('down')}`;
+    b.title = 'Cerveau de Nova Control';
+    return;
+  }
   const m = selectedModel();
   b.innerHTML = m ? `${icon(m.local ? 'shield' : 'cloud', 'lock')}<span>${esc(m.name)}</span>${icon('down')}` : `<span>Aucun modèle</span>${icon('down')}`;
   b.title = m ? (m.local ? 'Traitement local : rien ne quitte ton ordinateur' : 'Modèle distant') : 'Installe un modèle dans la page Modèles';
 }
 
-function modelMenu(anchor) {
+async function modelMenu(anchor) {
+  if (state.control && isMac()) {
+    const list = await Control.brains(ctxFor());
+    const cur = Control.currentBrain(ctxFor(), list);
+    const items = [{ header: 'Cerveau de Nova Control' }];
+    for (const x of list) items.push({ label: x.label, check: x.id === cur, action: async () => { await setSetting('controlModel', x.id); renderComposerModel(); } });
+    showMenu(anchor, items, { align: 'right', above: true });
+    return;
+  }
   const cur = selectedModel();
   const items = state.models.length ? [{ header: 'Modèles disponibles' }] : [{ header: 'Aucun modèle installé' }];
   for (const m of state.models) {

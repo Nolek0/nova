@@ -524,4 +524,10 @@ export default {
  "Réponses instantanées de Nova 1 pour les demandes simples (salutations, heure, date, dé, blagues), quel que soit le modèle choisi": "Instant Nova 1 answers for simple requests (greetings, time, date, dice, jokes), whatever model is selected",
  "Les dessins (« dessine un chat ») sont toujours faits par Nova 1. Désactivé : les petites demandes passent par le modèle choisi.": "Drawings (“draw a cat”) are always made by Nova 1. When off, small requests go to the selected model.",
  "Rechercher les mises à jour au lancement de NOVA": "Check for updates when NOVA starts",
+ "Téléphone": "Phone",
+ "Le téléphone se connecte directement à cet ordinateur, sans serveur ni compte. À la maison, il le trouve tout seul sur le Wi-Fi. Ailleurs, installe Tailscale (gratuit) sur les deux appareils.": "The phone connects directly to this computer, with no server or account. At home it finds it on the Wi-Fi by itself. Elsewhere, install Tailscale (free) on both devices.",
+ "Code d'appairage": "Pairing code",
+ "Nouveau code": "New code",
+ "Déconnecter les téléphones": "Disconnect phones",
+ "Aucun téléphone connecté pour l’instant.": "No phone connected yet.",
 };

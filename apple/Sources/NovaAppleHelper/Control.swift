@@ -9,6 +9,8 @@
 //   click {x, y, count?, button?}    → clic aux coordonnées écran (points)
 //   set_value {element, text}        → remplit un champ (refusé pour les champs de mot de passe)
 //   type {text} | key {combo} | scroll {dy}
+//   move {x, y} | drag {x, y, to_x, to_y}
+//   screen {max_width?, quality?}    → capture de l'écran principal (télécommande du téléphone), curseur et NOVA compris
 //   menu {path: ["Fichier", "Enregistrer sous…"]}
 //   open_app {name} | focus_app {name}
 //   mail {to, subject, body, send}   → Apple Mail (envoi seulement si NOVA l'a fait approuver)
@@ -24,6 +26,18 @@ import ScreenCaptureKit
 import Vision
 
 private let syntheticMark: Int64 = 0x4E4F5641 // « NOVA »
+
+/// Source des événements simulés. Par défaut, macOS ignore la vraie souris et le vrai clavier pendant
+/// 0,25 s après chaque événement simulé : pendant une tâche, la souris de l'utilisateur semblait bloquée.
+/// Ici, rien n'est suspendu : l'utilisateur garde la main à tout moment.
+nonisolated(unsafe) private let eventSource: CGEventSource? = {
+    let s = CGEventSource(stateID: .combinedSessionState)
+    s?.localEventsSuppressionInterval = 0
+    let all: CGEventFilterMask = [.permitLocalMouseEvents, .permitLocalKeyboardEvents, .permitSystemDefinedEvents]
+    s?.setLocalEventsFilterDuringSuppressionState(all, state: .eventSuppressionStateSuppressionInterval)
+    s?.setLocalEventsFilterDuringSuppressionState(all, state: .eventSuppressionStateRemoteMouseDrag)
+    return s
+}()
 
 enum ControlSession {
     nonisolated(unsafe) static var elements: [AXUIElement] = []
@@ -103,8 +117,16 @@ enum ControlSession {
             return ["ok": true, "clicked": [c.x, c.y]]
         case "click":
             let p = CGPoint(x: r["x"] as? Double ?? 0, y: r["y"] as? Double ?? 0)
-            click(p, count: r["count"] as? Int ?? 1, right: (r["button"] as? String) == "right")
+            click(p, count: r["count"] as? Int ?? 1, right: (r["button"] as? String) == "right", restore: r["restore"] as? Bool ?? true)
             return ["ok": true]
+        case "move":
+            post(CGEvent(mouseEventSource: eventSource, mouseType: .mouseMoved, mouseCursorPosition: CGPoint(x: r["x"] as? Double ?? 0, y: r["y"] as? Double ?? 0), mouseButton: .left))
+            return ["ok": true]
+        case "drag":
+            drag(from: CGPoint(x: r["x"] as? Double ?? 0, y: r["y"] as? Double ?? 0), to: CGPoint(x: r["to_x"] as? Double ?? 0, y: r["to_y"] as? Double ?? 0))
+            return ["ok": true]
+        case "screen":
+            return screenshot(near: nil, maxWidth: r["max_width"] as? Double ?? 1280, quality: r["quality"] as? Double ?? 0.55, remote: true) ?? ["error": "Capture impossible."]
         case "set_value":
             guard let el = element(r) else { return ["error": "Élément inconnu."] }
             if attr(el, kAXSubroleAttribute) as? String == (kAXSecureTextFieldSubrole as String) {
@@ -161,7 +183,7 @@ enum ControlSession {
             return pressCombo(r["combo"] as? String ?? "") ? ["ok": true] : ["error": "Raccourci inconnu."]
         case "scroll":
             let dy = Int32(r["dy"] as? Int ?? -5)
-            let e = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: dy, wheel2: 0, wheel3: 0)
+            let e = CGEvent(scrollWheelEvent2Source: eventSource, units: .line, wheelCount: 1, wheel1: dy, wheel2: 0, wheel3: 0)
             e?.setIntegerValueField(.eventSourceUserData, value: syntheticMark)
             e?.post(tap: .cghidEventTap)
             return ["ok": true]
@@ -378,7 +400,7 @@ enum ControlSession {
     }
 
     /// Capture de l'écran qui contient la fenêtre active, réduite à 1280 px de large (JPEG base64).
-    static func screenshot(near: CGRect?) -> [String: Any]? {
+    static func screenshot(near: CGRect?, maxWidth: Double = 1920, quality: Double = 0.7, remote: Bool = false) -> [String: Any]? {
         guard CGPreflightScreenCaptureAccess() else { return ["screenshot_error": "permission"] }
         let sem = DispatchSemaphore(value: 0)
         nonisolated(unsafe) var result: [String: Any]?
@@ -386,20 +408,21 @@ enum ControlSession {
             defer { sem.signal() }
             guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) else { return }
             let mid = near.map { CGPoint(x: $0.midX, y: $0.midY) }
-            let display = content.displays.first { d in mid.map { d.frame.contains($0) } ?? false } ?? content.displays.first
+            let display = content.displays.first { d in mid.map { d.frame.contains($0) } ?? false } ?? content.displays.first { $0.displayID == CGMainDisplayID() } ?? content.displays.first
             guard let display else { return }
-            // NOVA lui-même (fenêtres, curseur néon, île) n'apparaît pas sur la capture.
-            let own = content.applications.filter { ownBundles.contains($0.bundleIdentifier) }
+            // NOVA lui-même (fenêtres, curseur néon, île) n'apparaît pas sur la capture de l'agent ;
+            // la télécommande montre l'écran tel que l'utilisateur le voit.
+            let own = remote ? [] : content.applications.filter { ownBundles.contains($0.bundleIdentifier) }
             let filter = SCContentFilter(display: display, excludingApplications: own, exceptingWindows: [])
             let cfg = SCStreamConfiguration()
             // Une image à la taille de l'écran en points : un pixel de la capture = un point à l'écran.
-            let scale = min(1.0, 1920.0 / Double(display.width))
+            let scale = min(1.0, maxWidth / Double(display.width))
             cfg.width = Int(Double(display.width) * scale)
             cfg.height = Int(Double(display.height) * scale)
-            cfg.showsCursor = false
+            cfg.showsCursor = remote
             guard let img = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg) else { return }
             let rep = NSBitmapImageRep(cgImage: img)
-            guard let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else { return }
+            guard let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: quality]) else { return }
             result = ["screenshot": jpg.base64EncodedString(), "screen": [display.frame.minX, display.frame.minY, display.frame.width, display.frame.height],
                       "image_size": [img.width, img.height]]
         }
@@ -414,19 +437,40 @@ enum ControlSession {
         e?.post(tap: .cghidEventTap)
     }
 
-    static func click(_ p: CGPoint, count: Int, right: Bool = false) {
+    /// `restore` : le pointeur revient ensuite là où l'utilisateur l'avait laissé (Nova Control) ;
+    /// la télécommande du téléphone le laisse sur place.
+    static func click(_ p: CGPoint, count: Int, right: Bool = false, restore: Bool = true) {
+        let before = CGEvent(source: nil)?.location
+        defer {
+            if restore, let before, hypot(before.x - p.x, before.y - p.y) > 2 {
+                usleep(30_000)
+                post(CGEvent(mouseEventSource: eventSource, mouseType: .mouseMoved, mouseCursorPosition: before, mouseButton: .left))
+            }
+        }
         let (down, up, btn): (CGEventType, CGEventType, CGMouseButton) = right ? (.rightMouseDown, .rightMouseUp, .right) : (.leftMouseDown, .leftMouseUp, .left)
-        post(CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: btn))
+        post(CGEvent(mouseEventSource: eventSource, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: btn))
         usleep(60_000)
         for i in 1...max(1, min(count, 3)) {
-            let d = CGEvent(mouseEventSource: nil, mouseType: down, mouseCursorPosition: p, mouseButton: btn)
+            let d = CGEvent(mouseEventSource: eventSource, mouseType: down, mouseCursorPosition: p, mouseButton: btn)
             d?.setIntegerValueField(.mouseEventClickState, value: Int64(i))
             post(d)
-            let u = CGEvent(mouseEventSource: nil, mouseType: up, mouseCursorPosition: p, mouseButton: btn)
+            let u = CGEvent(mouseEventSource: eventSource, mouseType: up, mouseCursorPosition: p, mouseButton: btn)
             u?.setIntegerValueField(.mouseEventClickState, value: Int64(i))
             post(u)
             usleep(40_000)
         }
+    }
+
+    static func drag(from a: CGPoint, to b: CGPoint) {
+        post(CGEvent(mouseEventSource: eventSource, mouseType: .mouseMoved, mouseCursorPosition: a, mouseButton: .left))
+        usleep(40_000)
+        post(CGEvent(mouseEventSource: eventSource, mouseType: .leftMouseDown, mouseCursorPosition: a, mouseButton: .left))
+        for i in 1...12 {
+            let t = Double(i) / 12
+            usleep(16_000)
+            post(CGEvent(mouseEventSource: eventSource, mouseType: .leftMouseDragged, mouseCursorPosition: CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t), mouseButton: .left))
+        }
+        post(CGEvent(mouseEventSource: eventSource, mouseType: .leftMouseUp, mouseCursorPosition: b, mouseButton: .left))
     }
 
     static func focusedIsSecure() -> Bool {
@@ -441,7 +485,7 @@ enum ControlSession {
         while i < utf16.count {
             let chunk = Array(utf16[i..<min(i + 16, utf16.count)])
             for down in [true, false] {
-                let e = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down)
+                let e = CGEvent(keyboardEventSource: eventSource, virtualKey: 0, keyDown: down)
                 chunk.withUnsafeBufferPointer { e?.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: $0.baseAddress) }
                 post(e)
             }
@@ -489,7 +533,7 @@ enum ControlSession {
         }
         guard let code = namedKeys[last] ?? (last.count == 1 ? keyCode(for: last) : nil) else { return false }
         for down in [true, false] {
-            let e = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: down)
+            let e = CGEvent(keyboardEventSource: eventSource, virtualKey: code, keyDown: down)
             e?.flags = flags
             post(e)
             usleep(20_000)
