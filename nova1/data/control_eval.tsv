@@ -34,3 +34,7 @@ envoyer_mail	envoie un message sur outlook à paul@exemple.fr avec objet salut e
 envoyer_message	le même sur discord à First Pi	destinataire=First Pi;app=discord
 ouvrir_app	ouvre outlok	app=outlok
 ouvrir_app	va sur chrom	app=chrom
+envoyer_message	Envoyer à Ferspi sur Discord salut ça va et demande lui si il a de l'argent à me prêter stp	destinataire=Ferspi;app=Discord;message=salut ça va et demande lui si il a de l'argent à me prêter stp
+envoyer_message	écris à Sarah sur whatsapp salut et demande-lui si elle peut me ramener mes clés demain	destinataire=Sarah;app=whatsapp;message=salut et demande-lui si elle peut me ramener mes clés demain
+envoyer_message	demande à Tom sur discord s'il joue ce soir	destinataire=Tom;app=discord;message=s'il joue ce soir
+envoyer_message	envoie à Léo sur insta coucou et dis lui que je passe samedi	destinataire=Léo;app=insta;message=coucou et dis lui que je passe samedi

@@ -175,6 +175,12 @@ FILL = {"h": ["18h", "20h30", "midi", "14h", "9h"], "n": ["5", "10", "15", "20"]
         "who": ["frérot", "ma belle", "champion", "boss"]}
 
 
+ASK_PARTS = ["si il a de l'argent à me prêter", "s'il a de l'argent à me prêter", "s'il vient {d}", "si elle vient {d}", "s'il est dispo {d}",
+             "comment il va", "comment elle va", "à quelle heure il arrive", "à quelle heure on mange", "où il est", "s'il peut m'appeler",
+             "de m'appeler {d}", "s'il a vu {x}", "si elle a reçu {x}", "ce qu'il fait {d}", "quand il rentre", "s'il veut venir à {p}",
+             "s'il a fini {x}", "s'il peut me ramener {x}", "pourquoi il répond pas", "combien ça coûte", "s'il joue {d}"]
+
+
 def fake_msg(rng, short=False):
     if short or rng.random() < 0.3:
         g = rng.choice(GREET)
@@ -205,6 +211,24 @@ def g_envoyer_message(rng, t):
         (f"préviens {who}{sur} que {msg}", msg), (f"envoie à {who}{sur} le message {msg}", msg), (f"envoie un message a {who}{sur} : {short}", short),
         (f"envoi un msg à {who}{sur} : {msg}", msg), (f"send {short} to {who}{' on ' + app if app else ''}", short),
         (f"text {who}{' on ' + app if app else ''} : {msg}", msg),
+    ]
+    # Consignes indirectes (« demande-lui s'il… », « dis-lui que… ») : tout le contenu est le message ;
+    # NOVA le réécrit ensuite au discours direct (app/src-tauri/src/tools/speech.rs).
+    q = rng.choice(ASK_PARTS)
+    for k, v in FILL.items():
+        q = q.replace("{" + k + "}", rng.choice(v))
+    g = rng.choice(GREET + ["salut ça va", "yo bien ou quoi", "coucou ça va", "wesh", "hey ça va"])
+    lui = rng.choice(["demande lui", "demande-lui", "demandes lui"])
+    dis = rng.choice(["dis lui", "dis-lui"])
+    st = rng.choice(["stp", "svp", "s'il te plaît", ""])
+    ask = f"{g} et {lui} {q} {st}".strip()
+    tell = f"{g} et {dis} que {rng.choice(MSG_PARTS).replace('{d}', rng.choice(FILL['d'])).replace('{x}', rng.choice(FILL['x'])).replace('{h}', rng.choice(FILL['h'])).replace('{n}', rng.choice(FILL['n'])).replace('{p}', rng.choice(FILL['p'])).replace('{who}', rng.choice(FILL['who']))}"
+    verb = rng.choice(["envoyer", "envoie", "envoi", "écris", "ecris", "écrire"])
+    forms += [
+        (f"{verb} à {who}{sur} {ask}", ask), (f"{verb} à {who}{sur} {tell}", tell), (f"{verb} un message à {who}{sur} {ask}", ask),
+        (f"{verb} à {who}{sur} {msg}", msg), (f"{verb} à {who}{sur} {short}", short),
+        (f"{lui} à {who}{sur} {q}".replace("demande lui à", "demande à").replace("demande-lui à", "demande à").replace("demandes lui à", "demande à"), q),
+        (f"dis à {who}{sur} {short} et {lui} {q}", f"{short} et {lui} {q}"),
     ]
     text, m = rng.choice(forms)
     if rng.random() < 0.08:

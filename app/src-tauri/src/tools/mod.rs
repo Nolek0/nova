@@ -3,6 +3,7 @@
 pub mod actions;
 pub mod attachments;
 pub mod files;
+pub mod speech;
 pub mod sysinfo;
 pub mod weather;
 pub mod web;

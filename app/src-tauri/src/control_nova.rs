@@ -1322,8 +1322,12 @@ async fn send_chat(c: &mut Ctx<'_>, chat: &Chat, who: &str, msg: &str) -> Result
             fill(c, &f, "", "Champ du message", false).await?;
         }
     }
-    let r = c.call(json!({"cmd": "type", "text": msg})).await?;
-    c.step(&format!("Écrire « {} »", msg.chars().take(60).collect::<String>()), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
+    // Champ vidé d'abord (texte resté d'un essai précédent), puis message collé d'un coup : certaines
+    // messageries (Discord) ne laissent pas relire la frappe, et une frappe recollée faisait un doublon.
+    let _ = c.call(json!({"cmd": "key", "combo": "cmd+a"})).await;
+    let _ = c.call(json!({"cmd": "key", "combo": "delete"})).await;
+    let r = c.call(json!({"cmd": "paste", "text": msg})).await?;
+    c.step(&format!("Écrire « {} »", msg.chars().take(80).collect::<String>()), "", r["error"].as_str().unwrap_or("ok"), r["error"].is_null());
     c.pause(700).await;
     // 3. Vérification finale juste avant l'envoi : toujours la bonne conversation, et le bon texte.
     let obs = c.observe().await?;
@@ -1347,7 +1351,10 @@ async fn send_chat(c: &mut Ctx<'_>, chat: &Chat, who: &str, msg: &str) -> Result
         ok
     };
     if !ok {
-        c.step("Envoyer le message", "Envoi refusé : le texte reste dans le champ.", "non envoyé", false);
+        // Rien ne reste dans le champ : le prochain essai repart d'un champ vide.
+        let _ = c.call(json!({"cmd": "key", "combo": "cmd+a"})).await;
+        let _ = c.call(json!({"cmd": "key", "combo": "delete"})).await;
+        c.step("Envoyer le message", "Envoi refusé : j'ai effacé le texte du champ.", "non envoyé", false);
         return Ok(());
     }
     c.key("return").await?;
@@ -1673,7 +1680,8 @@ Actions possibles (champs entre parenthèses, tous en texte) :
 - inconnu (raison) : seulement si la demande est vraiment impossible sur un ordinateur.
 Règles :
 - Sépare TOUJOURS le nom de l'application de l'instruction : « ouvre OneNote et structure mes notes » = ouvrir_app(app="OneNote") puis transformer(consigne="structure mes notes").
-- Une étape par action, dans l'ordre. Garde les mots exacts de l'utilisateur pour message, texte, objet, requete et consigne (sans guillemets).
+- Une étape par action, dans l'ordre. Garde les mots exacts de l'utilisateur pour texte, objet, requete et consigne (sans guillemets).
+- "message" = le texte EXACT à envoyer, écrit comme l'utilisateur l'écrirait lui-même au destinataire (discours direct, tutoiement) : « dis-lui que je suis en retard » → "Je suis en retard" ; « demande-lui s'il a de l'argent à me prêter » → "Tu as de l'argent à me prêter ?". Garde son ton et ses mots (« stp », « ça va »), sans rien ajouter.
 - « le même », « pareil », « idem » : répète le message (et l'objet) de l'étape précédente.
 - N'invente jamais un destinataire, une adresse ou un message qui n'est pas dans la demande : laisse le champ absent.
 - Corrige les fautes sur les noms d'applications (« outlok » → « Outlook », « discrod » → « Discord »).
@@ -1682,6 +1690,10 @@ Règles :
 Exemples :
 Demande : ouvre onenote et structure mes notes
 {"etapes":[{"action":"ouvrir_app","app":"OneNote"},{"action":"transformer","consigne":"structure mes notes"}]}
+Demande : Envoyer à Ferspi sur Discord salut ça va et demande lui si il a de l'argent à me prêter stp
+{"etapes":[{"action":"envoyer_message","destinataire":"Ferspi","application":"Discord","message":"Salut ça va ? T'as de l'argent à me prêter stp ?"}]}
+Demande : dis à maman sur whatsapp que je rentre tard
+{"etapes":[{"action":"envoyer_message","destinataire":"maman","application":"WhatsApp","message":"Je rentre tard"}]}
 Demande : envoie un message à Sam sur discord avec un gif et dans la recherche des gifs écris argent
 {"etapes":[{"action":"envoyer_message","destinataire":"Sam","application":"Discord","gif":"argent"}]}
 Demande : envoie un mail sur outlook à a@b.fr avec objet salut et message coucou et le même sur discord à First Pi
@@ -1769,6 +1781,84 @@ async fn understand(c: &mut Ctx<'_>, goal: &str) -> Option<Vec<Value>> {
     Some(steps)
 }
 
+const COMPOSER: &str = r#"Tu rédiges le message EXACT que l'utilisateur veut envoyer, comme s'il l'écrivait lui-même au destinataire.
+Tu reçois la demande complète de l'utilisateur, le destinataire et le contenu repéré dans la demande.
+Règles :
+- Écris au discours direct, à la place de l'utilisateur, en t'adressant au destinataire (tutoiement, sauf si la demande vouvoie ou si c'est un e-mail formel).
+- Transforme les consignes : « dis-lui que je suis en retard » → « Je suis en retard » ; « demande-lui s'il a de l'argent à me prêter » → « Tu as de l'argent à me prêter ? » ; « dis-lui salut » → « Salut » ; « souhaite-lui bon anniversaire » → « Joyeux anniversaire ! ».
+- Garde le ton et les mots de l'utilisateur (« stp », « ça va », l'argot, les fautes volontaires) et ajoute la ponctuation d'une vraie question (« ? »).
+- N'ajoute AUCUNE information, signature, formule ou emoji qui ne sont pas dans la demande. N'invente rien.
+- Le message ne contient jamais le nom de l'application, ni « envoie », « dis-lui », « demande-lui », ni le nom du destinataire s'il n'était pas dans le contenu.
+- Si le contenu est déjà le message lui-même (« envoie test à Paul »), recopie-le tel quel.
+Réponds UNIQUEMENT par un objet JSON : {"message": "..."}
+Exemples :
+Demande complète : Envoyer à Ferspi sur Discord salut ça va et demande lui si il a de l'argent à me prêter stp
+Contenu repéré : salut ça va et demande lui si il a de l'argent à me prêter stp
+{"message": "Salut ça va ? T'as de l'argent à me prêter stp ?"}
+Demande complète : dis à maman sur whatsapp que je rentre tard ce soir
+Contenu repéré : que je rentre tard ce soir
+{"message": "Je rentre tard ce soir"}
+Demande complète : demande à Léa sur insta si elle vient demain à la soirée
+Contenu repéré : si elle vient demain à la soirée
+{"message": "Tu viens demain à la soirée ?"}
+Demande complète : écris à Tom sur discord pour lui dire bravo pour son match et demande lui à quelle heure il rentre
+Contenu repéré : bravo pour son match et demande lui à quelle heure il rentre
+{"message": "Bravo pour ton match ! Tu rentres à quelle heure ?"}
+Demande complète : envoie un mail à paul@exemple.fr pour lui dire que la réunion est décalée à lundi
+Contenu repéré : que la réunion est décalée à lundi
+{"message": "La réunion est décalée à lundi."}
+Demande complète : envoie test de nova à Sam sur discord
+Contenu repéré : test de nova
+{"message": "test de nova"}"#;
+
+/// Le message exact à envoyer, tel que l'utilisateur l'écrirait lui-même (discours direct).
+/// Avec un modèle de langage (Gemma…), il le rédige à partir de la demande complète ; sinon (ou si sa
+/// réponse est douteuse), conversion intégrée (tools::speech).
+/// `planned` : le message vient déjà du modèle (compréhension) ; on ne le réécrit que s'il garde une consigne.
+async fn compose_message(c: &mut Ctx<'_>, draft: &str, who: &str, app: &str, mail: bool, planned: bool) -> String {
+    let fallback = crate::tools::speech::direct(draft);
+    let indirect = |m: &str| {
+        let f = fold(m);
+        ["dis-lui", "dis lui", "demande-lui", "demande lui", "envoie-lui", "envoie lui", "dis-leur", "demande-leur", "souhaite-lui"].iter().any(|k| f.contains(k))
+    };
+    if planned && !indirect(draft) {
+        if let Some(model) = c.llm.clone() {
+            c.step("Message rédigé", &format!("{} : « {} »", model.name, draft.trim()), "ok", true);
+        }
+        return draft.trim().to_string();
+    }
+    let Some(model) = c.llm.clone() else {
+        if fallback != draft.trim() {
+            c.step("Message rédigé", &format!("« {} » → « {fallback} »", draft.trim()), "ok", true);
+        }
+        return fallback;
+    };
+    c.status(&format!("{} rédige le message pour {who}…", model.name));
+    let prompt = format!("Demande complète : {}\nDestinataire : {who} ({app}{})\nContenu repéré : {}", c.goal, if mail { ", e-mail" } else { "" }, draft.trim());
+    let req = crate::llm::GenRequest { instructions: COMPOSER.into(), history: vec![], prompt, images: vec![] };
+    let started = std::time::Instant::now();
+    let written = crate::control::complete(c.state, &model, &req, c.cancel)
+        .await
+        .ok()
+        .and_then(|o| crate::control::parse_action(&o))
+        .and_then(|v| v["message"].as_str().map(|m| m.trim().to_string()))
+        .filter(|m| {
+            let f = fold(m);
+            // Réponse douteuse : vide, trop longue, ou qui garde la consigne au lieu de la rédiger.
+            !m.is_empty()
+                && m.chars().count() <= draft.chars().count() * 3 + 80
+                && !indirect(m)
+                && !f.contains(&format!("sur {}", fold(app)))
+        });
+    let msg = written.clone().unwrap_or(fallback);
+    let how = match written {
+        Some(_) => format!("{} ({:.1} s)", model.name, started.elapsed().as_secs_f32()),
+        None => "rédaction intégrée".to_string(),
+    };
+    c.step("Message rédigé", &format!("{how} : « {msg} »"), "ok", true);
+    msg
+}
+
 /// Contenu d'un message : après « pour lui dire que », « : », « avec le message »… (le plus long trouvé).
 fn body_in(text: &str) -> Option<String> {
     // « envoie salut à First Pi », « dis bonjour à maman sur WhatsApp » : le message est entre le verbe et « à ».
@@ -1780,6 +1870,17 @@ fn body_in(text: &str) -> Option<String> {
         // « écris à Léa : on se voit à 18h » n'est pas cette forme (le texte commence par « à », ou contient « : »).
         let looks_direct = !f.starts_with("a ") && !f.starts_with("au ") && !m.contains(':') && !f.contains(" sur ");
         if looks_direct && !generic.contains(&f.as_str()) && !f.starts_with("un message") && !f.starts_with("un mail") && m.chars().count() <= 200 {
+            return Some(m);
+        }
+    }
+    // « envoyer à Ferspi sur Discord salut ça va… » : le message suit le nom de la messagerie.
+    let after_app = regex::Regex::new(r"(?i)^\s*(?:nova\s+)?(?:envoie|envoies|envoi|envoyer|écris|ecris|écrire|ecrire)\s+(?:un\s+(?:message|msg|mp|dm)\s+)?(?:à|a)\s+.+?\s+(?:sur|via)\s+(\S+)\s+(.+)$").unwrap();
+    if let Some(c) = after_app.captures(text) {
+        let m = c[2].trim().trim_start_matches(':').trim().to_string();
+        let f = fold(&m);
+        // « …, envoie-lui « on se voit » » : le message est après la consigne (marqueurs plus bas).
+        let instruction = ["que ", "qu'", "pour ", "en ", "avec ", "le message", "qui ", "envoie", "ecris", "écris", "et envoie", "et ecris"];
+        if chat_named(&c[1]).is_some() && !instruction.iter().any(|p| f.starts_with(p)) && m.chars().count() >= 2 {
             return Some(m);
         }
     }
@@ -1970,6 +2071,9 @@ async fn execute_with(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<Stri
                 None if slot("gif").is_some() => String::new(),
                 None => c.ask("Quel message veux-tu envoyer ?").await?,
             };
+            // Le message exact, tel que tu l'écrirais toi-même (« demande-lui s'il… » → « Tu… ? »).
+            let planned = plan.is_some() && slot("message").is_some();
+            let msg = if same || msg.trim().is_empty() { msg } else { compose_message(c, &msg, &who, chat.app, false, planned).await };
             c.step(&format!("Message pour {who} sur {}", chat.app), &format!("{} est une messagerie : je vais ouvrir la conversation avec {who}, écrire, vérifier puis envoyer après ton accord.", chat.app), "ok", true);
             send_chat(c, chat, &who, &msg).await?;
             if let Some(q) = slot("gif") {
@@ -1991,6 +2095,8 @@ async fn execute_with(c: &mut Ctx<'_>, text: &str, current_app: &mut Option<Stri
             let same = is_same_ref(text);
             let body = f_body.or_else(|| body_in(text)).or_else(|| slot("message")).or_else(|| if same { c.last_message.clone() } else { None }).unwrap_or_default();
             let body = if body.is_empty() { c.ask("Que veux-tu écrire dans ce mail ?").await? } else { body };
+            let planned = plan.is_some() && slot("message").is_some();
+            let body = if same { body } else { compose_message(c, &body, &to, "e-mail", true, planned).await };
             let subject = f_subject.or_else(|| slot("objet")).or_else(|| if same { c.last_subject.clone() } else { None }).unwrap_or_else(|| {
                 let s: String = body.split_whitespace().take(6).collect::<Vec<_>>().join(" ");
                 let mut ch = s.chars();
@@ -2203,6 +2309,17 @@ pub async fn run(state: &AppState, app: &AppHandle, goal: &str, mode: &str, use_
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn message_written_as_the_user_would() {
+        let req = "Envoyer à Ferspi sur Discord salut ça va et demande lui si il a de l'argent à me prêter stp";
+        assert_eq!(recipient_in(req).as_deref(), Some("Ferspi"));
+        let body = body_in(req).unwrap();
+        assert_eq!(body, "salut ça va et demande lui si il a de l'argent à me prêter stp");
+        assert_eq!(crate::tools::speech::direct(&body), "Salut ça va ? Tu as de l'argent à me prêter stp ?");
+        assert_eq!(body_in("envoie un message à Tom sur Discord : on joue ce soir ?").as_deref(), Some("on joue ce soir ?"));
+        assert_eq!(body_in("envoie un message à Tom sur WhatsApp pour lui dire que j'arrive").as_deref(), Some("j'arrive"));
+    }
 
     #[test]
     fn splits_multi_step_requests() {

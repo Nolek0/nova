@@ -2,6 +2,18 @@
 
 All notable changes to NOVA are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.5.2] — 2026-10-21
+
+### Changed
+- **Messages written the way you would write them**: Nova Control no longer copies the instruction into the message. « Envoyer à Ferspi sur Discord salut ça va et demande-lui s'il a de l'argent à me prêter stp » now sends « Salut ça va ? Tu as de l'argent à me prêter stp ? ».
+  - Gemma writes the exact message in direct speech, in your tone (« stp », slang), without adding anything. When its draft still contains an instruction, a second, dedicated writing pass runs.
+  - Without Gemma, a built-in converter turns « dis-lui que… », « demande-lui si / comment / à quelle heure… », « demande-lui de… » and « souhaite-lui… » into a direct message, conjugating the verbs (il a → tu as, ils viennent → vous venez).
+  - The Nova Control model was retrained with these phrasings, including « Envoyer à X sur Discord <message> ».
+- Each message shows a « Message rédigé » step, so you can see exactly what will be sent.
+
+### Fixed
+- No more doubled text in Discord (« onetest de nova iPhonetest de nova iPhone »): the message field is cleared, then the message is pasted in one go. A refused message is erased from the field.
+
 ## [0.5.1] — 2026-10-21
 
 ### Fixed
