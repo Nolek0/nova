@@ -100,12 +100,23 @@ struct SettingsView: View {
     private var macModelCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Sur le Mac").sectionTitle()
-            Picker(selection: Binding(get: { nova.selectedModel?.id ?? "" }, set: { v in Task { await nova.setSetting("model", v) } })) {
-                ForEach(nova.models) { Text($0.name).tag($0.id) }
+            // Menu à boutons (et non Picker) : le réglage du Mac ne change que si tu touches un modèle.
+            Menu {
+                ForEach(nova.models) { m in
+                    Button {
+                        Task { await nova.setSetting("model", m.id) }
+                    } label: {
+                        if m.id == nova.selectedModel?.id { Label(m.name, systemImage: "checkmark") } else { Text(m.name) }
+                    }
+                }
             } label: {
-                Label("Modèle", systemImage: "cpu")
+                HStack {
+                    Label("Modèle", systemImage: "cpu").foregroundStyle(.white)
+                    Spacer()
+                    Text(nova.selectedModel?.name ?? "—").foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down").font(.caption).foregroundStyle(.white.opacity(0.5))
+                }
             }
-            .pickerStyle(.menu)
             Toggle(isOn: Binding(get: { nova.settings["thinking"] == "1" }, set: { v in Task { await nova.setSetting("thinking", v ? "1" : "0") } })) {
                 Label("Réflexion approfondie", systemImage: "brain")
             }

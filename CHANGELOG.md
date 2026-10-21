@@ -2,6 +2,12 @@
 
 All notable changes to NOVA are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.5.1] — 2026-10-21
+
+### Fixed
+- Nova Control understands requests with Gemma 4 (or another model installed in NOVA) whenever one is installed, including tasks started from the iPhone. The Apple model is only used as a last resort.
+- The iPhone app no longer changes the Mac's settings on its own: the model and the Nova Control mode are now chosen from menus that act only when tapped.
+
 ## [0.5.0] — 2026-10-21
 
 ### Fixed

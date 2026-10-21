@@ -23,7 +23,8 @@ export async function brains(ctx) {
   try {
     const o = await invoke('models_overview');
     const usable = o.available.filter((m) => m.provider !== 'nova1');
-    const chat = usable.find((m) => m.id === ctx.state.settings.model) || usable.find((m) => m.provider === 'llama') || usable[0];
+    // Même choix que le cœur (control_nova::pick_llm) : le modèle Apple seulement en dernier recours.
+    const chat = usable.find((m) => m.id === ctx.state.settings.model && m.provider !== 'apple') || usable.find((m) => m.provider === 'llama') || usable.find((m) => m.provider === 'ollama') || usable[0];
     if (chat) list.push({ id: 'nova-control-llm', label: `Nova Control + ${chat.name} · comprend mieux les demandes libres` });
     usable.filter((m) => m.vision).forEach((m) => list.push({ id: m.id, label: `${m.name} · mode avancé (plus lent)` }));
   } catch {}

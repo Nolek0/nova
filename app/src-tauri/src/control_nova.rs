@@ -1704,14 +1704,15 @@ const ACTIONS: &[&str] = &[
     "musique", "etape",
 ];
 
-/// Meilleur modèle de langage local pour comprendre le français (choisi dans NOVA, sinon Gemma / llama.cpp,
-/// sinon Ollama, sinon le modèle Apple).
+/// Meilleur modèle de langage local pour comprendre le français : celui choisi dans NOVA s'il est installé
+/// dans NOVA (Gemma / llama.cpp, Ollama), sinon Gemma, sinon Ollama, et le modèle Apple seulement en dernier
+/// recours (il comprend moins bien les demandes libres).
 async fn pick_llm(state: &AppState) -> Option<crate::llm::ModelInfo> {
     let models = state.available_models().await;
     let chosen = state.db.lock().unwrap().setting("model");
     let usable: Vec<_> = models.into_iter().filter(|m| m.provider != "nova1").collect();
     chosen
-        .and_then(|id| usable.iter().find(|m| m.id == id).cloned())
+        .and_then(|id| usable.iter().find(|m| m.id == id && m.provider != "apple").cloned())
         .or_else(|| usable.iter().find(|m| m.provider == "llama").cloned())
         .or_else(|| usable.iter().find(|m| m.provider == "ollama").cloned())
         .or_else(|| usable.iter().find(|m| m.provider == "apple").cloned())

@@ -102,9 +102,11 @@ struct ControlView: View {
                 }
             }
             Menu {
-                Picker("Mode", selection: Binding(get: { nova.settings["controlMode"] ?? "auto" }, set: { v in Task { await nova.setSetting("controlMode", v) } })) {
-                    ForEach(Self.modes, id: \.0) { m in
-                        Text("\(m.1) — \(m.2)").tag(m.0)
+                ForEach(Self.modes, id: \.0) { m in
+                    Button {
+                        Task { await nova.setSetting("controlMode", m.0) }
+                    } label: {
+                        if m.0 == (nova.settings["controlMode"] ?? "auto") { Label("\(m.1) — \(m.2)", systemImage: "checkmark") } else { Text("\(m.1) — \(m.2)") }
                     }
                 }
             } label: {
