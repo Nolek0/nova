@@ -2,7 +2,7 @@
 
 All notable changes to NOVA are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.5.0] — 2026-10-21
 
 ### Fixed
 - Nova Control no longer freezes the user's mouse: macOS used to ignore the real mouse and keyboard for 0.25 s after each simulated event. After each click, the pointer now goes back to where the user left it.
@@ -14,7 +14,7 @@ All notable changes to NOVA are listed here. Versions follow [Semantic Versionin
 - **Settings › Phone** in the desktop app: a built-in server (off by default, port 47860), advertised by Bonjour and paired with a 6-digit code. It needs no external service and also works through Tailscale.
 - The macOS helper can now capture the whole screen with the cursor (`screen`), move the pointer (`move`) and drag (`drag`).
 - **NOVA for iPhone works without a computer**: Nova 1 runs on the iPhone (a Swift port of the inference that gives the same results), together with NOVA's maths and unit tools and Apple Intelligence. Conversations made on the iPhone stay on the iPhone. When the Mac is reachable, NOVA uses its models; when it stops answering, the question is taken over on the iPhone.
-- **"Control the Mac" sessions**: the Mac streams its screen only after you tap the button. While a session runs, the Mac shows "L'iPhone contrôle le Mac" in the notch, and the iPhone shows "Vous contrôlez le Mac" in the Dynamic Island (Live Activity).
+- **"Control the Mac" sessions**: the Mac streams its screen only after you tap the button, and only while the iPhone shows it. While a session runs, the Mac shows "L'iPhone contrôle le Mac" in the notch. In the app, a "Vous contrôlez le Mac" banner grows out of the Dynamic Island; when you leave the app, the real Dynamic Island (Live Activity) takes over. A session ends with the Stop button, when you leave the Screen tab, or after 3 minutes without news from the phone.
 - **New iPhone design**: animated aurora background, the NOVA orb, Liquid Glass cards, and redesigned chat, Nova Control, screen and settings.
 
 ## [0.4.8] — 2026-10-20

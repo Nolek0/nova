@@ -39,21 +39,55 @@
 		AA0000000000000000000002 /* NovaPhone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NovaPhone.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000005 /* NovaPhone-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "NovaPhone-Info.plist"; sourceTree = "<group>"; };
 		AA0000000000000000000006 /* NovaLiveActivity-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "NovaLiveActivity-Info.plist"; sourceTree = "<group>"; };
-		AA0000000000000000000061 /* nova1.bin */ = {isa = PBXFileReference; lastKnownFileType = file; name = nova1.bin; path = ../nova1/model/nova1.bin; sourceTree = "<group>"; };
+		AA0000000000000000000061 /* nova1.bin */ = {isa = PBXFileReference; lastKnownFileType = archive.macbinary; name = nova1.bin; path = ../nova1/model/nova1.bin; sourceTree = "<group>"; };
 		AA0000000000000000000102 /* NovaLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NovaLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		AA0000000000000000000003 /* NovaPhone */ = {isa = PBXFileSystemSynchronizedRootGroup; path = NovaPhone; sourceTree = "<group>"; };
-		AA0000000000000000000007 /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Shared; sourceTree = "<group>"; };
-		AA0000000000000000000008 /* NovaTools */ = {isa = PBXFileSystemSynchronizedRootGroup; name = "NovaTools (Mac)"; path = ../apple/Sources/NovaTools; sourceTree = "<group>"; };
-		AA0000000000000000000009 /* NovaModels */ = {isa = PBXFileSystemSynchronizedRootGroup; name = "NovaModels (Mac)"; path = ../apple/Sources/NovaModels; sourceTree = "<group>"; };
-		AA0000000000000000000103 /* NovaLiveActivity */ = {isa = PBXFileSystemSynchronizedRootGroup; path = NovaLiveActivity; sourceTree = "<group>"; };
+		AA0000000000000000000003 /* NovaPhone */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = NovaPhone;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000007 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000008 /* NovaTools (Mac) */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = "NovaTools (Mac)";
+			path = ../apple/Sources/NovaTools;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000009 /* NovaModels (Mac) */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = "NovaModels (Mac)";
+			path = ../apple/Sources/NovaModels;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000103 /* NovaLiveActivity */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = NovaLiveActivity;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		AA0000000000000000000010 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		AA0000000000000000000110 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		AA0000000000000000000010 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000110 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -63,8 +97,8 @@
 				AA0000000000000000000003 /* NovaPhone */,
 				AA0000000000000000000103 /* NovaLiveActivity */,
 				AA0000000000000000000007 /* Shared */,
-				AA0000000000000000000008 /* NovaTools */,
-				AA0000000000000000000009 /* NovaModels */,
+				AA0000000000000000000008 /* NovaTools (Mac) */,
+				AA0000000000000000000009 /* NovaModels (Mac) */,
 				AA0000000000000000000061 /* nova1.bin */,
 				AA0000000000000000000005 /* NovaPhone-Info.plist */,
 				AA0000000000000000000006 /* NovaLiveActivity-Info.plist */,
@@ -86,45 +120,50 @@
 /* Begin PBXNativeTarget section */
 		AA0000000000000000000020 /* NovaPhone */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AA0000000000000000000030;
+			buildConfigurationList = AA0000000000000000000030 /* Build configuration list for PBXNativeTarget "NovaPhone" */;
 			buildPhases = (
 				AA0000000000000000000011 /* Sources */,
 				AA0000000000000000000010 /* Frameworks */,
 				AA0000000000000000000012 /* Resources */,
 				AA0000000000000000000064 /* Embed Foundation Extensions */,
 			);
-			buildRules = ();
+			buildRules = (
+			);
 			dependencies = (
 				AA0000000000000000000065 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				AA0000000000000000000003 /* NovaPhone */,
 				AA0000000000000000000007 /* Shared */,
-				AA0000000000000000000008 /* NovaTools */,
-				AA0000000000000000000009 /* NovaModels */,
+				AA0000000000000000000008 /* NovaTools (Mac) */,
+				AA0000000000000000000009 /* NovaModels (Mac) */,
 			);
 			name = NovaPhone;
-			packageProductDependencies = ();
+			packageProductDependencies = (
+			);
 			productName = NovaPhone;
 			productReference = AA0000000000000000000002 /* NovaPhone.app */;
 			productType = "com.apple.product-type.application";
 		};
 		AA0000000000000000000120 /* NovaLiveActivity */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AA0000000000000000000130;
+			buildConfigurationList = AA0000000000000000000130 /* Build configuration list for PBXNativeTarget "NovaLiveActivity" */;
 			buildPhases = (
 				AA0000000000000000000111 /* Sources */,
 				AA0000000000000000000110 /* Frameworks */,
 				AA0000000000000000000112 /* Resources */,
 			);
-			buildRules = ();
-			dependencies = ();
+			buildRules = (
+			);
+			dependencies = (
+			);
 			fileSystemSynchronizedGroups = (
-				AA0000000000000000000103 /* NovaLiveActivity */,
 				AA0000000000000000000007 /* Shared */,
+				AA0000000000000000000103 /* NovaLiveActivity */,
 			);
 			name = NovaLiveActivity;
-			packageProductDependencies = ();
+			packageProductDependencies = (
+			);
 			productName = NovaLiveActivity;
 			productReference = AA0000000000000000000102 /* NovaLiveActivity.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -139,14 +178,21 @@
 				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
-					AA0000000000000000000020 = { CreatedOnToolsVersion = 27.0; };
-					AA0000000000000000000120 = { CreatedOnToolsVersion = 27.0; };
+					AA0000000000000000000020 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					AA0000000000000000000120 = {
+						CreatedOnToolsVersion = 27.0;
+					};
 				};
 			};
-			buildConfigurationList = AA0000000000000000000031;
+			buildConfigurationList = AA0000000000000000000031 /* Build configuration list for PBXProject "NovaPhone" */;
 			developmentRegion = fr;
 			hasScannedForEncodings = 0;
-			knownRegions = (fr, Base, );
+			knownRegions = (
+				fr,
+				Base,
+			);
 			mainGroup = AA0000000000000000000001;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
@@ -169,12 +215,30 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		AA0000000000000000000112 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		AA0000000000000000000112 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		AA0000000000000000000011 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		AA0000000000000000000111 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		AA0000000000000000000011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000111 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -192,13 +256,13 @@
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				SDKROOT = iphoneos;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -210,10 +274,10 @@
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				SDKROOT = iphoneos;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -289,7 +353,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "NovaLiveActivity-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "NOVA";
+				INFOPLIST_KEY_CFBundleDisplayName = NOVA;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -313,7 +377,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "NovaLiveActivity-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "NOVA";
+				INFOPLIST_KEY_CFBundleDisplayName = NOVA;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -332,9 +396,33 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		AA0000000000000000000030 = {isa = XCConfigurationList; buildConfigurations = (AA0000000000000000000052, AA0000000000000000000053, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		AA0000000000000000000031 = {isa = XCConfigurationList; buildConfigurations = (AA0000000000000000000050, AA0000000000000000000051, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		AA0000000000000000000130 = {isa = XCConfigurationList; buildConfigurations = (AA0000000000000000000152, AA0000000000000000000153, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		AA0000000000000000000030 /* Build configuration list for PBXNativeTarget "NovaPhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000052 /* Debug */,
+				AA0000000000000000000053 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000031 /* Build configuration list for PBXProject "NovaPhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000050 /* Debug */,
+				AA0000000000000000000051 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000130 /* Build configuration list for PBXNativeTarget "NovaLiveActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000152 /* Debug */,
+				AA0000000000000000000153 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 	};
 	rootObject = AA0000000000000000000040 /* Project object */;

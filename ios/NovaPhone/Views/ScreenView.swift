@@ -73,6 +73,9 @@ struct ScreenView: View {
                 }
                 .padding(.horizontal, 30)
                 .disabled(session.starting || !nova.online)
+                if let e = session.activityError {
+                    Label(e, systemImage: "info.circle").font(.footnote).foregroundStyle(.white.opacity(0.6)).padding(.horizontal, 30)
+                }
                 if let e = session.error {
                     Label(e, systemImage: "exclamationmark.triangle.fill").font(.footnote).foregroundStyle(.orange).padding(.horizontal, 30)
                 } else if !nova.online {

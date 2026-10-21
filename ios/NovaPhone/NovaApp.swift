@@ -24,9 +24,9 @@ struct NovaApp: App {
                 Notifier.shared.startListening()
                 Task { await Nova.shared.refresh() }
             case .background:
+                // La session « Contrôler le Mac » continue (Dynamic Island) : sans l'app à l'écran,
+                // le Mac ne capture plus rien.
                 Notifier.shared.enteredBackground()
-                // Le Mac ne capture plus rien quand l'app n'est plus à l'écran.
-                Task { await ScreenSession.shared.stop() }
             default: break
             }
         }
@@ -51,6 +51,7 @@ struct RootView: View {
             SwiftUI.Tab("Réglages", systemImage: "gearshape", value: Tab.settings) { SettingsView() }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        .overlay(alignment: .top) { IslandBanner() }
         .task {
             Notifier.shared.startListening()
             await nova.refresh()

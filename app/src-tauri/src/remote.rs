@@ -32,10 +32,12 @@ static SERVER: Mutex<Option<Server>> = Mutex::new(None);
 /// Code d'appairage : (code, créé le, essais ratés).
 static PIN: Mutex<Option<(String, Instant, u32)>> = Mutex::new(None);
 static EVENTS: OnceLock<broadcast::Sender<Value>> = OnceLock::new();
-/// Session « Contrôler le Mac » : dernière requête du téléphone. L'écran n'est capturé que pendant une
-/// session (bouton sur l'iPhone) ; sans nouvelle du téléphone pendant 20 s, elle s'arrête seule.
+/// Session « Contrôler le Mac » : dernière requête du téléphone. L'écran n'est capturé qu'à la demande
+/// du téléphone pendant une session (bouton sur l'iPhone) : une session sans requête ne coûte rien.
+/// Elle continue quand l'app iPhone passe en arrière-plan (Dynamic Island), et s'arrête seule
+/// après 3 min sans nouvelles du téléphone.
 static SESSION: Mutex<Option<Instant>> = Mutex::new(None);
-const SESSION_IDLE: Duration = Duration::from_secs(20);
+const SESSION_IDLE: Duration = Duration::from_secs(180);
 
 fn events() -> &'static broadcast::Sender<Value> {
     EVENTS.get_or_init(|| broadcast::channel(64).0)

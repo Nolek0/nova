@@ -1,7 +1,9 @@
 // Session « Contrôler le Mac » : rien ne tourne sur le Mac tant que tu n'as pas touché le bouton.
 // Pendant la session : le Mac affiche « L'iPhone contrôle le Mac » dans son encoche, et l'iPhone
-// « Vous contrôlez le Mac » dans la Dynamic Island. Elle s'arrête avec le bouton, quand l'app passe
-// en arrière-plan, ou toute seule côté Mac si l'iPhone ne donne plus de nouvelles (20 s).
+// « Vous contrôlez le Mac » autour de la Dynamic Island (animation dans l'app, activité en direct
+// quand tu quittes l'app : iOS ne montre jamais l'activité d'une app ouverte). Le Mac ne capture
+// son écran qu'à la demande de l'iPhone : une session en arrière-plan ne coûte rien. Elle s'arrête
+// avec le bouton, en quittant l'onglet Écran, ou toute seule côté Mac après 3 min sans nouvelles.
 
 import ActivityKit
 import Foundation
@@ -15,6 +17,8 @@ final class ScreenSession {
     var starting = false
     var started = Date()
     var error: String?
+    /// Raison pour laquelle l'activité en direct n'a pas pu démarrer (Réglages de l'iPhone…).
+    var activityError: String?
     private var activity: Activity<ControlActivityAttributes>?
 
     func start() async {
@@ -47,9 +51,17 @@ final class ScreenSession {
     }
 
     private func startActivity() {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        activityError = nil
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            activityError = "Activités en direct désactivées pour NOVA (Réglages › NOVA › Activités en direct)."
+            return
+        }
         let attrs = ControlActivityAttributes(computer: Nova.shared.computerName.isEmpty ? "Mac" : Nova.shared.computerName, started: started)
-        activity = try? Activity.request(attributes: attrs, content: .init(state: .init(detail: "Écran à distance"), staleDate: nil))
+        do {
+            activity = try Activity.request(attributes: attrs, content: .init(state: .init(detail: "Écran à distance"), staleDate: nil))
+        } catch {
+            activityError = "Dynamic Island indisponible : \(error.localizedDescription)"
+        }
     }
 
     private func endActivity() async {

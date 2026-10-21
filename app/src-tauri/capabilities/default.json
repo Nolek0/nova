@@ -8,7 +8,8 @@
     "island-*",
     "cursor-*",
     "control-ask",
-    "control-notch"
+    "control-notch",
+    "remote-notch"
   ],
   "permissions": [
     "core:default",

@@ -62,11 +62,12 @@ Si l'ordinateur n'apparaît pas, touche **« Saisir l'adresse »** et recopie l'
 | 💻 **Écran** | Touche **Contrôler le Mac** : l'écran du Mac s'affiche en direct. Un toucher fait un clic, deux touchers un double-clic et un appui long un clic droit. Glisser fait défiler la page, ou déplace la souris selon le bouton en haut. Pince l'écran pour zoomer. En bas, tu as le clavier, les touches ⏎ ⌫ ⇥ Échap, les flèches, ⌘C ⌘V ⌘Z ⌘⇥ ⌘Espace, et lecture/pause. |
 | ⚙️ **Réglages** | L'ordinateur connecté, où NOVA réfléchit (avec l'option « Toujours répondre sur l'iPhone »), le modèle du Mac, la réflexion approfondie et les notifications. |
 
-**Économie de batterie.** Le Mac ne filme son écran que pendant une session « Contrôler le Mac ». Pendant la session :
+**Économie de batterie.** Le Mac ne filme son écran que pendant une session « Contrôler le Mac », et seulement quand l'iPhone affiche l'écran. Pendant la session :
 - le Mac affiche **« L'iPhone contrôle le Mac »** dans son encoche ;
-- l'iPhone affiche **« Vous contrôlez le Mac »** dans la Dynamic Island et sur l'écran verrouillé, avec la durée.
+- dans l'app, une pastille **« Vous contrôlez le Mac »** sort de la Dynamic Island, puis reste en petit autour de l'île avec la durée ;
+- quand tu quittes l'app, la session continue dans la **vraie Dynamic Island** et sur l'écran verrouillé. Le Mac ne capture plus rien tant que tu n'es pas revenu dans l'app.
 
-La session s'arrête avec le bouton **Arrêter**, ou dès que tu quittes l'onglet ou l'app. Côté Mac, elle s'arrête aussi toute seule si le téléphone ne donne plus de nouvelles pendant 20 secondes.
+La session s'arrête avec le bouton **Arrêter**, quand tu quittes l'onglet Écran, ou toute seule côté Mac après 3 minutes sans nouvelles du téléphone.
 
 **Notifications** : Nova Control te prévient quand il a besoin de ton accord (tu peux **Autoriser** ou **Refuser** directement depuis la notification), quand il pose une question (tu peux **Répondre** depuis la notification) et quand une tâche est finie. NOVA te prévient aussi quand une réponse est prête.
 
