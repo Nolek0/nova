@@ -439,3 +439,17 @@ canvas.plot { width: 100%; height: 340px; display: block; }
 .update-pop .faint { font-size: 12px; }
 .update-pop .up-progress { display: grid; gap: 6px; }
 @media (prefers-reduced-motion: reduce) { .update-pop { transition: none; } }
+
+/* Tâche longue (génération de vidéo) : étapes et barre de progression. */
+.task-progress { display: grid; gap: 10px; max-width: 460px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--hover); }
+.task-progress ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; font-size: 13px; }
+.task-progress li { display: flex; align-items: center; gap: 9px; color: var(--text-3); }
+.task-progress li svg { width: 14px; height: 14px; color: var(--success); }
+.task-progress li.done { color: var(--text-2); }
+.task-progress li.active { color: var(--text); font-weight: 600; }
+.task-progress li small { font-weight: 400; color: var(--text-2); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.task-progress .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent); animation: pulse 1.4s ease-in-out infinite; margin: 2px; }
+.task-progress .ring { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--text-3); margin: 2px; }
+.task-progress .faint { font-variant-numeric: tabular-nums; }
+@keyframes pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .task-progress .dot { animation: none; } }

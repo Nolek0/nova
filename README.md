@@ -91,6 +91,11 @@ Nova 1 is a family of small models and tools written and trained from scratch in
 
 Nova 1 does not hold open conversations; that is what the chat models are for. It never tries to identify people. Training details and scores are in [`nova1/model/RAPPORT.md`](nova1/model/RAPPORT.md) and [`nova1/model/RAPPORT_VISION.md`](nova1/model/RAPPORT_VISION.md).
 
+### 🎬 Nova Vidéo — videos made on your Mac
+- Write *“make a video of a cat running in a garden”* (or pick **Nova Vidéo** in the model list): NOVA creates a **5-second 720×416 video** on your Mac, with nothing sent online, and plays it in the chat.
+- A progress card shows each step, the elapsed time and an estimate of the time left. Expect about 7 minutes on a 16 GB Apple Silicon Mac, using under 4 GB of memory.
+- Powered by **Wan 2.1 1.3B** (Alibaba, Apache-2.0) through [**wan2gp-mac**](https://github.com/Nolek0/wan2gp-mac), our open-source Apple Silicon port of [WanGP](https://github.com/deepbeepmeep/Wan2GP) by DeepBeepMeep (WanGP Community License; the port is unofficial and not endorsed by DeepBeepMeep). About 13 GB to download from the **Models** page.
+
 ### 🖼️ Images & documents
 - Drop, paste or attach images, PDFs, videos, text and code files
 - Images are described by a local vision model: NOVA switches to one automatically, or uses Nova 1 Vision

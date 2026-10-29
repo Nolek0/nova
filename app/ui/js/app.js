@@ -787,6 +787,20 @@ async function copyText(t) {
   toast('Copié dans le presse-papiers.');
 }
 
+const clock = (s) => (s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`);
+
+/** Tâche longue (vidéo) : étapes, barre globale, temps écoulé et estimation du temps restant. */
+function progressCard(p) {
+  const pct = Math.max(0, Math.min(100, p.percent));
+  const steps = p.stages.map((label, i) => {
+    const st = i < p.stage ? 'done' : i === p.stage ? 'active' : 'todo';
+    const mark = st === 'done' ? icon('check') : st === 'active' ? '<span class="dot"></span>' : '<span class="ring"></span>';
+    return `<li class="${st}">${mark}<span>${esc(label)}${st === 'active' && p.detail ? ` <small>${esc(p.detail)}</small>` : ''}</span></li>`;
+  }).join('');
+  const left = p.remaining != null ? ` · environ ${clock(Math.max(1, p.remaining))} restantes` : '';
+  return el(`<div class="task-progress"><ol>${steps}</ol><div class="progress"><div style="width:${pct}%"></div></div><div class="faint">${Math.floor(pct)} % · ${clock(p.elapsed)} écoulées${left}</div></div>`);
+}
+
 function fillAssistant(n, m, live = {}) {
   const body = n.querySelector('.body');
   const streaming = state.streamingId === m.id;
@@ -808,6 +822,7 @@ function fillAssistant(n, m, live = {}) {
     body.appendChild(box);
   }
   if (live.status) body.appendChild(el(`<div class="status-line"><span class="typing"><i></i><i></i><i></i></span>${esc(live.status)}</div>`));
+  if (live.progress && streaming) body.appendChild(progressCard(live.progress));
   if (m.content) {
     const md = el('<div class="md"></div>');
     md.innerHTML = renderMarkdown(m.content);
@@ -816,6 +831,11 @@ function fillAssistant(n, m, live = {}) {
   } else if (streaming && !live.status && !reasoning) {
     body.appendChild(el('<div class="typing"><i></i><i></i><i></i></div>'));
   }
+  (m.attachments || []).filter((a) => a.kind === 'video' && a.path).forEach((a) => {
+    const box = el(`<div class="video-result" style="display:grid;gap:6px;max-width:640px"><video controls loop playsinline preload="metadata" style="width:100%;border-radius:12px;background:#000" src="${fileSrc(a.path)}"></video><div class="row"><button class="btn small">${icon('folder')} Afficher le fichier</button></div></div>`);
+    box.querySelector('button').onclick = () => invoke('open_path', { path: a.path, reveal: true }).catch((err) => toast(errorText(err), 'error'));
+    body.appendChild(box);
+  });
   if (m.meta?.files?.length) body.appendChild(fileList(m.meta.files));
   if (m.meta?.action) body.appendChild(actionCard(m));
   if (m.meta?.sources?.length) {
@@ -965,14 +985,14 @@ function regenerate(m) {
 async function runGeneration(command, args, replaceFromId = null) {
   const ch = new Channel();
   let reply = null;
-  const live = { text: '', reasoning: '', status: '' };
+  const live = { text: '', reasoning: '', status: '', progress: null };
   let frame = 0;
   const paint = () => {
     frame = 0;
     if (!reply) return;
     reply.content = live.text;
     const node = document.querySelector(`.msg-ai[data-id="${reply.id}"]`);
-    if (node) fillAssistant(node, reply, { reasoning: live.reasoning || undefined, status: live.status || undefined });
+    if (node) fillAssistant(node, reply, { reasoning: live.reasoning || undefined, status: live.status || undefined, progress: live.progress || undefined });
     scrollBottom();
   };
   const schedule = () => { if (!frame) frame = requestAnimationFrame(paint); };
@@ -1004,6 +1024,7 @@ async function runGeneration(command, args, replaceFromId = null) {
         break;
       }
       case 'status': live.status = ev.text; schedule(); break;
+      case 'progress': live.progress = ev; live.status = ''; schedule(); break;
       case 'delta': live.text += ev.text; live.status = ''; schedule(); break;
       case 'reasoning': live.reasoning += ev.text; schedule(); break;
       case 'replace': live.text = ev.text; schedule(); break;

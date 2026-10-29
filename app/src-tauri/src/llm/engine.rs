@@ -73,7 +73,7 @@ fn find_file(dir: &Path, name: &str) -> Option<PathBuf> {
     walkdir::WalkDir::new(dir).max_depth(4).into_iter().flatten().find(|e| e.file_name() == name).map(|e| e.into_path())
 }
 
-fn http() -> reqwest::Client {
+pub(crate) fn http() -> reqwest::Client {
     reqwest::Client::builder()
         .user_agent("NOVA-AI/0.2 (+local assistant)")
         .connect_timeout(Duration::from_secs(15))
@@ -309,7 +309,7 @@ impl Engine {
     }
 }
 
-async fn download(url: &str, dest: &Path, expected: u64, cancel: &Cancel, progress: impl Fn(u64, u64)) -> Result<()> {
+pub(crate) async fn download(url: &str, dest: &Path, expected: u64, cancel: &Cancel, progress: impl Fn(u64, u64)) -> Result<()> {
     let part = dest.with_extension("part");
     // Plusieurs tentatives ; chacune reprend là où la précédente s'est arrêtée (en-tête Range).
     let mut last_err = None;
@@ -372,7 +372,7 @@ async fn download_once(url: &str, part: &Path, expected: u64, cancel: &Cancel, p
     Ok(())
 }
 
-fn extract(archive: &Path, dest: &Path) -> Result<()> {
+pub(crate) fn extract(archive: &Path, dest: &Path) -> Result<()> {
     let name = archive.to_string_lossy();
     if name.ends_with(".zip") {
         let mut zip = zip::ZipArchive::new(std::fs::File::open(archive)?)?;

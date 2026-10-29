@@ -3,6 +3,10 @@ import { invoke, esc, el, toast, errorText, formatBytes, confirmDialog } from '.
 import { icon } from '../icons.js';
 
 const progress = {}; // tâche → dernier état reçu
+const VIDEO_ID = 'video:wan-1.3b';
+const VIDEO_TASK = `model:${VIDEO_ID}`;
+/** Texte de progression : octets pour un fichier, étapes (en %) pour l'installation de Nova Vidéo. */
+const progressText = (p) => (p.task === VIDEO_TASK ? `${esc(p.label || 'Préparation…')} · ${Math.round(p.total ? (100 * p.done) / p.total : 0)} %` : p.total ? `${formatBytes(p.done)} sur ${formatBytes(p.total)}` : 'Préparation…');
 let rerender = null;
 
 export function onProgress(p) {
@@ -15,7 +19,7 @@ export function onProgress(p) {
     const bar = document.querySelector(`[data-task="${CSS.escape(p.task)}"]`);
     if (bar) {
       bar.querySelector('.progress div').style.width = (p.total ? (100 * p.done) / p.total : 0) + '%';
-      bar.querySelector('.ptext').textContent = `${formatBytes(p.done)} sur ${formatBytes(p.total)}`;
+      bar.querySelector('.ptext').innerHTML = progressText(p);
     } else rerender?.(false);
   }
 }
@@ -31,6 +35,7 @@ export async function render(v, ctx) {
     const content = page.querySelector('#content');
     content.innerHTML = '';
     content.appendChild(novaCard(o, ctx));
+    if (o.video?.supported) content.appendChild(videoCard(o, ctx));
     content.appendChild(engineCard(o, ctx));
     if (o.engine.installed) {
       content.appendChild(el(`<h2 style="margin-top:8px">${icon('sparkles')} Modèles gratuits <span class="faint" style="font-weight:400">— mémoire détectée : ${o.ram_gb} Go</span></h2>`));
@@ -58,6 +63,49 @@ function novaCard(o, ctx) {
     const use = el('<button class="btn primary small">Utiliser Nova 1</button>');
     use.onclick = async () => { await ctx.setSetting('model', 'nova1'); toast('Nova 1 sera utilisé pour les prochaines réponses.'); ctx.setView('models'); };
     act.appendChild(use);
+  }
+  return card;
+}
+
+/** Nova Vidéo : Wan 2.1 1.3B via le portage Mac de WanGP (Python + modèles, ≈ 13 Go). */
+function videoCard(o, ctx) {
+  const v = o.video;
+  const task = progress[VIDEO_TASK];
+  const inUse = ctx.state.settings.model === VIDEO_ID;
+  const card = el(`<div class="card stack"><div class="row"><b style="font-size:15px">${icon('video')} Nova Vidéo</b><span class="faint">Wan 2.1 · 1,3 milliard de paramètres</span><span class="grow"></span>${v.installed ? `<span class="badge ok">${icon('check')} Installé</span>` : '<span class="badge">Non installé</span>'}</div>
+    <p class="muted" style="margin:0;font-size:12.5px">Crée des vidéos de 5 secondes à partir d'une phrase, entièrement sur ton Mac. Écris simplement « fais une vidéo d'un chat qui saute » dans le chat, ou choisis Nova Vidéo dans la liste des modèles.</p>
+    <div class="kv"><div><small>Taille</small><span>≈ ${v.size_gb} Go (programme + modèles)</span></div><div><small>Durée</small><span>5 s en 720×416</span></div><div><small>Temps</small><span>≈ 7 min sur un Mac de 16 Go</span></div><div><small>Mémoire utilisée</small><span>≈ 4 Go au plus</span></div><div><small>Mémoire conseillée</small><span>${v.min_ram_gb} Go</span></div></div>
+    ${v.ram_gb < v.min_ram_gb ? `<div class="warn-line">${icon('alert')} ${v.ram_gb} Go de mémoire détectés : la génération risque d'échouer ou d'être très lente.</div>` : ''}
+    <div class="faint">Basé sur Wan 2.1 (Alibaba, Apache 2.0) et WanGP de DeepBeepMeep (WanGP Community License), porté sur Mac par NOVA : github.com/Nolek0/wan2gp-mac</div>
+    <div class="row act"></div></div>`);
+  const act = card.querySelector('.act');
+  if (task) act.appendChild(progressBar(task));
+  else if (v.installed) {
+    if (inUse) act.appendChild(el(`<span class="badge ok">${icon('check')} Utilisé</span>`));
+    else {
+      const use = el('<button class="btn primary small">Utiliser pour les prochains messages</button>');
+      use.onclick = async () => { await ctx.setSetting('model', VIDEO_ID); toast('Tes prochains messages créeront des vidéos.'); ctx.setView('models'); };
+      act.appendChild(use);
+    }
+    const del = el(`<button class="btn small danger">${icon('trash')} Supprimer</button>`);
+    del.onclick = async () => {
+      if (!(await confirmDialog(`Supprimer Nova Vidéo (≈ ${v.size_gb} Go) de cet ordinateur ? Les vidéos déjà créées sont gardées.`))) return;
+      await invoke('delete_model', { id: VIDEO_ID });
+      if (inUse) await ctx.setSetting('model', '');
+      ctx.setView('models');
+    };
+    act.appendChild(del);
+  } else {
+    const dl = el(`<button class="btn small">${icon('download')} Télécharger (≈ ${v.size_gb} Go)</button>`);
+    dl.onclick = async () => {
+      if (!(await confirmDialog(`Télécharger Nova Vidéo ? (≈ ${v.size_gb} Go, gratuit) : le programme depuis GitHub, Python et PyTorch, puis les modèles Wan 2.1 depuis Hugging Face. Compte 15 à 30 minutes. Tu peux annuler à tout moment.`))) return;
+      progress[VIDEO_TASK] = { task: VIDEO_TASK, label: 'Préparation…', done: 0, total: 100 };
+      ctx.setView('models');
+      invoke('download_model', { id: VIDEO_ID })
+        .then(() => toast('Nova Vidéo est prêt. Écris « fais une vidéo de… » dans le chat.'))
+        .catch((err) => toast(errorText(err), 'error'));
+    };
+    act.appendChild(dl);
   }
   return card;
 }
@@ -90,7 +138,7 @@ function engineCard(o, ctx) {
 
 function progressBar(p) {
   const pct = p.total ? (100 * p.done) / p.total : 0;
-  const box = el(`<div class="grow" data-task="${esc(p.task)}" style="display:grid;gap:6px"><div class="progress"><div style="width:${pct}%"></div></div><div class="row"><span class="faint ptext">${p.total ? `${formatBytes(p.done)} sur ${formatBytes(p.total)}` : 'Préparation…'}</span><span class="grow"></span><button class="btn small">Annuler</button></div></div>`);
+  const box = el(`<div class="grow" data-task="${esc(p.task)}" style="display:grid;gap:6px"><div class="progress"><div style="width:${pct}%"></div></div><div class="row"><span class="faint ptext">${progressText(p)}</span><span class="grow"></span><button class="btn small">Annuler</button></div></div>`);
   box.querySelector('button').onclick = () => invoke('cancel_download', { task: p.task });
   return box;
 }

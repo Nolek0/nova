@@ -18,3 +18,6 @@ nova1/model/vision-train.log
 # Corpus Nova Control généré (régénérable : python3 nova1/data/generate_control.py 12)
 nova1/data/control_train.tsv
 nova1/model/control-train.log
+
+# Génération vidéo locale (WanGP porté sur Mac) : environnement et modèles, publiés dans leur propre dépôt
+video/

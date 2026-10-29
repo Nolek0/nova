@@ -1722,7 +1722,7 @@ const ACTIONS: &[&str] = &[
 async fn pick_llm(state: &AppState) -> Option<crate::llm::ModelInfo> {
     let models = state.available_models().await;
     let chosen = state.db.lock().unwrap().setting("model");
-    let usable: Vec<_> = models.into_iter().filter(|m| m.provider != "nova1").collect();
+    let usable: Vec<_> = models.into_iter().filter(|m| !matches!(m.provider.as_str(), "nova1" | "video")).collect();
     chosen
         .and_then(|id| usable.iter().find(|m| m.id == id && m.provider != "apple").cloned())
         .or_else(|| usable.iter().find(|m| m.provider == "llama").cloned())
@@ -2228,7 +2228,7 @@ pub async fn run(state: &AppState, app: &AppHandle, goal: &str, mode: &str, use_
     if use_llm {
         c.llm = pick_llm(state).await;
         c.vision = if c.llm.as_ref().map(|m| m.vision).unwrap_or(false) { c.llm.clone() } else {
-            state.available_models().await.into_iter().find(|m| m.vision && m.provider != "nova1")
+            state.available_models().await.into_iter().find(|m| m.vision && !matches!(m.provider.as_str(), "nova1" | "video"))
         };
     }
     let planned = understand(&mut c, goal).await;

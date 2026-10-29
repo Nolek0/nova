@@ -15,6 +15,8 @@ use tauri::ipc::Channel;
 pub enum Event {
     Started { conversation_id: String, user: Message, assistant: Message },
     Status { text: String },
+    /// Avancement d'une tâche longue (vidéo) : étape 0..stages, pourcentage global, temps écoulé et restant estimé (secondes).
+    Progress { stages: Vec<String>, stage: usize, percent: f64, elapsed: u64, remaining: Option<u64>, detail: String },
     Delta { text: String },
     Reasoning { text: String },
     Replace { text: String },
@@ -187,6 +189,10 @@ pub async fn respond(state: &AppState, user: Message, mut reply: Message, histor
     let tools_enabled = settings.get("toolsEnabled").map(|v| v != "0").unwrap_or(true);
     let angle = if settings.get("angleMode").map(|s| s == "degrees").unwrap_or(false) { math::expr::AngleMode::Degrees } else { math::expr::AngleMode::Radians };
 
+    // Nova Vidéo : modèle vidéo choisi, ou demande du type « fais une vidéo de… ».
+    let wants_video = !opts.is_code()
+        && user.attachments.is_empty()
+        && (opts.model_id.as_deref() == Some(crate::video::MODEL_ID) || crate::video::is_video_request(&user.content));
     let route = if user.attachments.is_empty() && !opts.is_code() { tools::route(&user.content, &allowed, tools_enabled) } else { Route::Model };
     let send_meta = |reply: &Message| {
         let _ = channel.send(Event::Meta { meta: reply.meta.clone() });
@@ -194,7 +200,7 @@ pub async fn respond(state: &AppState, user: Message, mut reply: Message, histor
 
     // Nova 1 : première couche instantanée (petites demandes, dessins), ou modèle choisi à part entière.
     let nova_selected = opts.model_id.as_deref() == Some(crate::nova::MODEL_ID);
-    let nova_reply = if opts.is_code() || !matches!(route, Route::Model) {
+    let nova_reply = if wants_video || opts.is_code() || !matches!(route, Route::Model) {
         None
     } else if nova_selected {
         Some(crate::nova::respond(&user.content, &user.attachments, &settings))
@@ -203,7 +209,9 @@ pub async fn respond(state: &AppState, user: Message, mut reply: Message, histor
         crate::nova::first_layer(&user.content, &user.attachments, &settings, fast)
     };
 
-    let result: Result<(), String> = if let Some(r) = nova_reply {
+    let result: Result<(), String> = if wants_video {
+        make_video(state, &user, &mut reply, &cancel, channel).await
+    } else if let Some(r) = nova_reply {
         reply.meta.tool = Some(r.tool.into());
         reply.meta.engine = Some("Nova 1 (sur l'appareil)".into());
         reply.meta.model = Some("Nova 1".into());
@@ -320,6 +328,126 @@ pub async fn respond(state: &AppState, user: Message, mut reply: Message, histor
     let _ = channel.send(Event::Done { message: reply });
 }
 
+/// Durée lisible : « 45 s », « 11 min 40 s ».
+fn duration_text(seconds: u64) -> String {
+    if seconds < 60 { format!("{seconds} s") } else { format!("{} min {:02} s", seconds / 60, seconds % 60) }
+}
+
+/// Consigne en anglais pour le modèle vidéo, par le modèle de conversation local s'il y en a un.
+async fn english_video_prompt(state: &AppState, subject: &str, cancel: &llm::Cancel) -> Option<String> {
+    let models = state.available_models().await;
+    let model = models.iter().find(|m| m.provider == "llama").or_else(|| models.iter().find(|m| m.provider == "ollama")).or_else(|| models.iter().find(|m| m.provider == "apple"))?;
+    let req = GenRequest {
+        instructions: "Tu écris des descriptions pour un générateur de vidéos. Traduis la demande en anglais en une ou deux phrases simples : \
+                       le sujet et son action, le décor et la lumière. L'image doit être nette et réaliste : n'ajoute jamais de flou, \
+                       de « motion blur », d'effet ou de mouvement de caméra, ni rien qui ne soit pas dans la demande. \
+                       Réponds uniquement par la description en anglais, sans guillemets."
+            .into(),
+        history: vec![],
+        prompt: subject.to_string(),
+        images: vec![],
+    };
+    let out = crate::control::complete(state, model, &req, cancel).await.ok()?;
+    let out = out.trim().trim_matches(['"', '«', '»']).trim().to_string();
+    (!out.is_empty() && out.len() < 800).then_some(out)
+}
+
+/// Crée la vidéo demandée sur l'ordinateur et la joint à la réponse.
+async fn make_video(state: &AppState, user: &Message, reply: &mut Message, cancel: &llm::Cancel, channel: &Channel<Event>) -> Result<(), String> {
+    use crate::video::{self, Video};
+    reply.meta.tool = Some("Vidéo".into());
+    reply.meta.engine = Some("Sur l'ordinateur (WanGP)".into());
+    reply.meta.model = Some(video::MODEL_NAME.into());
+    if !Video::supported() {
+        reply.content = "La création de vidéos fonctionne pour l'instant sur les **Mac à puce Apple** (M1 ou plus récent, 16 Go de mémoire conseillés).".into();
+        return Ok(());
+    }
+    if !state.video.is_installed() {
+        reply.content = format!("Pour créer des vidéos, installe **{}** dans la page **Modèles** (≈ {} Go, une seule fois). Ensuite tout se fait sur ton Mac, sans Internet.", video::MODEL_NAME, video::SIZE_GB);
+        return Ok(());
+    }
+    let subject = video::subject(&user.content);
+    let seconds = video::seconds(&user.content);
+    let started = std::time::Instant::now();
+    let stages: Vec<String> = ["Préparation de la consigne", "Chargement du modèle", "Création des images", "Assemblage de la vidéo"].iter().map(|s| s.to_string()).collect();
+    let expected = state.video.timings().scaled(seconds);
+    // Dernier avancement connu : (étape, pas, total, début de l'étape, durée de chaque étape terminée).
+    let track = std::sync::Arc::new(std::sync::Mutex::new((0usize, 0u64, 0u64, std::time::Instant::now(), [0f64; 4])));
+    let send = {
+        let (track, stages, channel) = (track.clone(), stages.clone(), channel.clone());
+        move || {
+            let (stage, step, total, since, _) = *track.lock().unwrap();
+            let elapsed = started.elapsed().as_secs_f64();
+            let (percent, remaining) = video::estimate(&expected, stage, step, total, since.elapsed().as_secs_f64(), elapsed);
+            let detail = if total > 1 && stage == 2 { format!("étape {step}/{total}") } else { String::new() };
+            let _ = channel.send(Event::Progress { stages: stages.clone(), stage, percent, elapsed: elapsed as u64, remaining: Some(remaining.round() as u64), detail });
+        }
+    };
+    send();
+    let prompt = english_video_prompt(state, &subject, cancel).await.unwrap_or_else(|| subject.clone());
+    // Sur Mac, le modèle de conversation occupe la même mémoire que la carte graphique : on l'arrête pendant la vidéo
+    // (il redémarre tout seul au prochain message).
+    state.engine.stop().await;
+    {
+        let mut t = track.lock().unwrap();
+        t.4[0] = t.3.elapsed().as_secs_f64();
+        *t = (1, 0, 0, std::time::Instant::now(), t.4);
+    }
+    send();
+    let generation = state.video.generate(&prompt, seconds, cancel, |phase, step, total, _| {
+        let stage = match phase {
+            "inference" | "denoising" => 2,
+            "decoding" => 3,
+            _ => 1,
+        };
+        let mut t = track.lock().unwrap();
+        if t.0 != stage {
+            let mut durations = t.4;
+            durations[t.0] += t.3.elapsed().as_secs_f64();
+            *t = (stage, step, total, std::time::Instant::now(), durations);
+        } else {
+            t.1 = step;
+            t.2 = total;
+        }
+    });
+    tokio::pin!(generation);
+    let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
+    let path = loop {
+        tokio::select! {
+            r = &mut generation => break r.map_err(|e| e.to_string())?,
+            _ = tick.tick() => send(),
+        }
+    };
+    // Durées réelles de cette vidéo : elles calibrent l'estimation des suivantes sur cet ordinateur.
+    {
+        let t = track.lock().unwrap();
+        let mut d = t.4;
+        d[t.0] += t.3.elapsed().as_secs_f64();
+        let previous = state.video.timings();
+        let load = if d[1] > 20.0 { d[1] } else { previous.load };
+        if d[2] > 10.0 {
+            state.video.save_timings(video::Timings { load, inference: d[2], decode: d[3].max(1.0) }, seconds);
+        }
+    }
+    reply.attachments.push(crate::db::Attachment {
+        id: uuid::Uuid::new_v4().to_string(),
+        kind: "video".into(),
+        filename: path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "video.mp4".into()),
+        path: path.to_string_lossy().to_string(),
+        extracted_text: None,
+    });
+    reply.content = format!(
+        "Voici ta vidéo de {} s : *{}*.\n\nCréée sur ton ordinateur en {} avec Wan 2.1 (via WanGP), sans rien envoyer sur Internet.",
+        seconds.round(),
+        subject,
+        duration_text(started.elapsed().as_secs())
+    );
+    if prompt != subject {
+        reply.content += &format!("\n\n<sub>Consigne envoyée au modèle : {prompt}</sub>");
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn generate(
     state: &AppState,
@@ -341,10 +469,10 @@ async fn generate(
         .ok_or_else(|| "Aucun modèle d'IA n'est disponible. Ouvre la page Modèles pour en installer un (gratuit).".to_string())?;
     // Nova 1 n'est pas un modèle de conversation : pour une recherche Web ou une génération libre,
     // on prend le premier modèle de conversation disponible.
-    if model.provider == "nova1" {
+    if model.provider == "nova1" || model.provider == "video" {
         model = models
             .iter()
-            .find(|m| m.provider != "nova1")
+            .find(|m| m.provider != "nova1" && m.provider != "video")
             .cloned()
             .ok_or_else(|| "Nova 1 ne fait pas de conversation libre. Installe un modèle de conversation (gratuit) dans la page Modèles, par exemple Gemma 4.".to_string())?;
     }

@@ -894,12 +894,12 @@ pub async fn control_start(state: State<'_, AppState>, app: AppHandle, goal: Str
     }
     // Mode avancé : un modèle de vision installé (Gemma 4…) décide de chaque action.
     let models = state.available_models().await;
-    let chosen = model_id.as_ref().and_then(|id| models.iter().find(|m| &m.id == id && m.provider != "nova1"));
+    let chosen = model_id.as_ref().and_then(|id| models.iter().find(|m| &m.id == id && !matches!(m.provider.as_str(), "nova1" | "video")));
     let model = chosen
         .filter(|m| m.vision)
-        .or_else(|| models.iter().find(|m| m.vision && m.provider != "nova1"))
+        .or_else(|| models.iter().find(|m| m.vision && !matches!(m.provider.as_str(), "nova1" | "video")))
         .or(chosen)
-        .or_else(|| models.iter().find(|m| m.provider != "nova1"))
+        .or_else(|| models.iter().find(|m| !matches!(m.provider.as_str(), "nova1" | "video")))
         .cloned()
         .ok_or("Nova Control a besoin d'un modèle qui voit les images, par exemple Gemma 4 (page Modèles).")?;
     if !model.vision {

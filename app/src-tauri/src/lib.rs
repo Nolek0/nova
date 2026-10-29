@@ -17,6 +17,7 @@ pub mod remote;
 #[cfg(target_os = "macos")]
 pub mod menubar;
 pub mod tools;
+pub mod video;
 
 use chat::{Event, Options};
 use db::{Attachment, Db, Message};
@@ -33,6 +34,7 @@ pub struct AppState {
     pub db: Mutex<Db>,
     pub data_dir: PathBuf,
     pub engine: Engine,
+    pub video: video::Video,
     pub generations: Mutex<HashMap<String, llm::Cancel>>,
     pub downloads: Mutex<HashMap<String, llm::Cancel>>,
     pub apple_status: Mutex<Option<(bool, String)>>,
@@ -91,6 +93,9 @@ impl AppState {
             out.push(llm::apple::model_info());
         }
         out.push(nova::model_info());
+        if self.video.is_installed() {
+            out.push(video::Video::model_info());
+        }
         out
     }
 
@@ -98,6 +103,7 @@ impl AppState {
         let mut roots = self.allowed_folders();
         roots.push(self.attachments_dir());
         roots.push(tools::actions::notes_dir());
+        roots.push(self.video.output_dir());
         tools::files::is_allowed(path, &roots)
     }
 }
@@ -387,6 +393,7 @@ struct ModelsOverview {
     apple_message: String,
     available: Vec<llm::ModelInfo>,
     downloads: Vec<String>,
+    video: video::VideoStatus,
 }
 
 #[tauri::command]
@@ -403,6 +410,7 @@ async fn models_overview(state: State<'_, AppState>) -> R<ModelsOverview> {
         apple_message: apple.1,
         available: state.available_models().await,
         downloads: state.downloads.lock().unwrap().keys().cloned().collect(),
+        video: state.video.status(),
     })
 }
 
@@ -433,7 +441,11 @@ async fn download_model(app: tauri::AppHandle, state: State<'_, AppState>, id: S
     let task = format!("model:{id}");
     let cancel = llm::Cancel::default();
     state.downloads.lock().unwrap().insert(task.clone(), cancel.clone());
-    let res = state.engine.download_model(&id, &cancel, |p| emit_progress(&app, p)).await;
+    let res = if id == video::MODEL_ID {
+        state.video.install(&cancel, |p| emit_progress(&app, p)).await
+    } else {
+        state.engine.download_model(&id, &cancel, |p| emit_progress(&app, p)).await
+    };
     state.downloads.lock().unwrap().remove(&task);
     match res {
         Ok(()) => {
@@ -472,6 +484,9 @@ fn cancel_download(state: State<'_, AppState>, task: String) {
 
 #[tauri::command]
 async fn delete_model(state: State<'_, AppState>, id: String) -> R<()> {
+    if id == video::MODEL_ID {
+        return state.video.delete().await.map_err(err);
+    }
     state.engine.delete_model(&id).await.map_err(err)
 }
 
@@ -805,6 +820,7 @@ pub fn run() {
             app.manage(AppState {
                 db: Mutex::new(db),
                 engine,
+                video: video::Video::new(&data_dir),
                 data_dir,
                 generations: Mutex::new(HashMap::new()),
                 downloads: Mutex::new(HashMap::new()),
@@ -913,6 +929,7 @@ pub fn run() {
                 remote::stop();
                 let state = app.state::<AppState>();
                 tauri::async_runtime::block_on(state.engine.stop());
+                tauri::async_runtime::block_on(state.video.stop());
             }
         });
 }

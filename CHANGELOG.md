@@ -2,6 +2,20 @@
 
 All notable changes to NOVA are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.5.3] — 2026-10-29
+
+### Added
+- **Nova Vidéo: make videos on your Mac.** Write « fais une vidéo d'un chat qui court » (or « génère une vidéo… », « make a video of… ») in the chat, or pick **Nova Vidéo (Wan 2.1)** in the model list. NOVA creates a 5-second 720×416 video on your Mac, with nothing sent online, and plays it right in the conversation.
+  - Uses Wan 2.1 Text2Video 1.3B through [wan2gp-mac](https://github.com/Nolek0/wan2gp-mac), our open-source Apple Silicon port of WanGP. The port fixes the noise/black videos WanGP produced on Macs.
+  - Your request is rewritten into an English visual description by the local chat model (Gemma, Apple…) when one is installed.
+  - About 7 minutes per video on a 16 GB M5, with a memory peak under 4 GB, so the Mac never swaps. The model stays loaded between videos.
+  - Memory: the 6 GB text encoder is loaded only to read a new request (block by block on the GPU, about 4 s) and released right after; the video decoder works in small tiles.
+  - Downloaded like the other models from the **Models** page: about 13 GB (Python environment + models). Macs with Apple Silicon only for now; 16 GB of memory recommended.
+- **Progress card** for videos: the current step (preparing the prompt, loading the model, creating the frames, assembling the video), an overall progress bar, the elapsed time and an estimate of the time left, updated every second.
+
+### Credits
+- [Wan 2.1](https://github.com/Wan-Video/Wan2.1) by the Wan team at Alibaba (Apache-2.0). [WanGP](https://github.com/deepbeepmeep/Wan2GP) by DeepBeepMeep (WanGP Community License 2.0): NOVA uses it through the free, unofficial Mac port, which is not endorsed by DeepBeepMeep.
+
 ## [0.5.2] — 2026-10-21
 
 ### Changed
