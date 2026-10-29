@@ -5,8 +5,10 @@ import { icon } from '../icons.js';
 const progress = {}; // tâche → dernier état reçu
 const VIDEO_ID = 'video:wan-1.3b';
 const VIDEO_TASK = `model:${VIDEO_ID}`;
+const HD_ID = 'video:wan-hd';
+const HD_TASK = `model:${HD_ID}`;
 /** Texte de progression : octets pour un fichier, étapes (en %) pour l'installation de Nova Vidéo. */
-const progressText = (p) => (p.task === VIDEO_TASK ? `${esc(p.label || 'Préparation…')} · ${Math.round(p.total ? (100 * p.done) / p.total : 0)} %` : p.total ? `${formatBytes(p.done)} sur ${formatBytes(p.total)}` : 'Préparation…');
+const progressText = (p) => (p.task === VIDEO_TASK || p.task === HD_TASK ? `${esc(p.label || 'Préparation…')} · ${Math.round(p.total ? (100 * p.done) / p.total : 0)} %` : p.total ? `${formatBytes(p.done)} sur ${formatBytes(p.total)}` : 'Préparation…');
 let rerender = null;
 
 export function onProgress(p) {
@@ -95,6 +97,7 @@ function videoCard(o, ctx) {
       ctx.setView('models');
     };
     act.appendChild(del);
+    card.appendChild(hdBlock(v, ctx));
   } else {
     const dl = el(`<button class="btn small">${icon('download')} Télécharger (≈ ${v.size_gb} Go)</button>`);
     dl.onclick = async () => {
@@ -108,6 +111,35 @@ function videoCard(o, ctx) {
     act.appendChild(dl);
   }
   return card;
+}
+
+/** Version HD (facultative) : Wan 2.2 5B + FastWan, 960×544 à 24 images/s, visages et détails bien plus nets. */
+function hdBlock(v, ctx) {
+  const task = progress[HD_TASK];
+  const box = el(`<div class="stack" style="border-top:1px solid var(--border);padding-top:10px;gap:8px"><div class="row"><b>Version HD</b><span class="faint">Wan 2.2 · 5 milliards de paramètres</span><span class="grow"></span>${v.hd_installed ? `<span class="badge ok">${icon('check')} Utilisée pour tes vidéos</span>` : '<span class="badge">Facultative</span>'}</div>
+    <p class="muted" style="margin:0;font-size:12.5px">Des vidéos bien plus réalistes : visages, yeux et vêtements nets, 960×544 à 24 images par seconde. Environ 9 min par vidéo de 5 s et ≈ 7 Go de mémoire au plus. Une fois installée, elle remplace la version standard.</p>
+    <div class="row act"></div></div>`);
+  const act = box.querySelector('.act');
+  if (task) act.appendChild(progressBar(task));
+  else if (v.hd_installed) {
+    const del = el(`<button class="btn small danger">${icon('trash')} Supprimer la HD</button>`);
+    del.onclick = async () => {
+      if (!(await confirmDialog(`Supprimer la version HD (≈ ${v.hd_size_gb} Go) ? Nova Vidéo repassera en version standard.`))) return;
+      await invoke('delete_model', { id: HD_ID });
+      ctx.setView('models');
+    };
+    act.appendChild(del);
+  } else {
+    const dl = el(`<button class="btn primary small">${icon('download')} Passer en HD (≈ ${v.hd_size_gb} Go)</button>`);
+    dl.onclick = async () => {
+      if (!(await confirmDialog(`Télécharger Nova Vidéo HD ? (≈ ${v.hd_size_gb} Go depuis Hugging Face : Wan 2.2 5B, son décodeur et l'accélération FastWan, licence Apache 2.0). Tu peux annuler à tout moment.`))) return;
+      progress[HD_TASK] = { task: HD_TASK, label: 'Préparation…', done: 0, total: 100 };
+      ctx.setView('models');
+      invoke('download_model', { id: HD_ID }).then(() => toast('Nova Vidéo HD est prête : tes prochaines vidéos seront en HD.')).catch((err) => toast(errorText(err), 'error'));
+    };
+    act.appendChild(dl);
+  }
+  return box;
 }
 
 function engineCard(o, ctx) {

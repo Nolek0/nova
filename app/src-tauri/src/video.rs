@@ -25,6 +25,16 @@ const MODEL_FILES: &[&str] = &[
 /// Environnement Python (~3 Go) + modèles (~10 Go).
 pub const SIZE_GB: f64 = 13.0;
 
+/// Nova Vidéo HD : Wan 2.2 TI2V 5B (int8) accéléré par FastWan (3 étapes), 960×544 à 24 images/s. Facultatif, en plus de Nova Vidéo.
+pub const HD_ID: &str = "video:wan-hd";
+pub const HD_NAME: &str = "Nova Vidéo HD (Wan 2.2)";
+const HD_FILES: &[&str] = &[
+    "ckpts/wan2.2_text2video_5B_quanto_mbf16_int8.safetensors",
+    "ckpts/Wan2.2_VAE.safetensors",
+    "loras/wan_5B/Wan2_2_5B_FastWanFullAttn_lora_rank_128_bf16.safetensors",
+];
+pub const HD_SIZE_GB: f64 = 8.7;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct VideoStatus {
     pub supported: bool,
@@ -32,6 +42,8 @@ pub struct VideoStatus {
     pub size_gb: f64,
     pub min_ram_gb: u64,
     pub ram_gb: u64,
+    pub hd_installed: bool,
+    pub hd_size_gb: f64,
 }
 
 struct Service {
@@ -81,6 +93,15 @@ impl Video {
         Self::supported() && self.python().exists() && MODEL_FILES.iter().all(|f| self.app_dir().join(f).exists())
     }
 
+    pub fn is_hd_installed(&self) -> bool {
+        self.is_installed() && HD_FILES.iter().all(|f| self.app_dir().join(f).exists())
+    }
+
+    /// Réglage utilisé : HD dès que ses fichiers sont là.
+    pub fn preset(&self) -> &'static str {
+        if self.is_hd_installed() { "hd" } else { "quality" }
+    }
+
     pub fn status(&self) -> VideoStatus {
         let mut sys = sysinfo::System::new();
         sys.refresh_memory();
@@ -90,14 +111,16 @@ impl Video {
             size_gb: SIZE_GB,
             min_ram_gb: 16,
             ram_gb: sys.total_memory() / 1_073_741_824,
+            hd_installed: self.is_hd_installed(),
+            hd_size_gb: HD_SIZE_GB,
         }
     }
 
-    pub fn model_info() -> crate::llm::ModelInfo {
+    pub fn model_info(&self) -> crate::llm::ModelInfo {
         crate::llm::ModelInfo {
             id: MODEL_ID.into(),
             provider: "video".into(),
-            name: MODEL_NAME.into(),
+            name: if self.is_hd_installed() { HD_NAME.into() } else { MODEL_NAME.into() },
             vision: false,
             local: true,
             size_bytes: Some((SIZE_GB * 1e9) as u64),
@@ -188,6 +211,62 @@ impl Video {
         Ok(())
     }
 
+    /// Télécharge les fichiers HD (Nova Vidéo doit déjà être installé).
+    pub async fn install_hd(&self, cancel: &Cancel, progress: impl Fn(Progress)) -> Result<()> {
+        if !self.is_installed() {
+            bail!("Installe d'abord Nova Vidéo, puis la version HD.");
+        }
+        let task = format!("model:{HD_ID}");
+        // Le script du portage installé peut dater d'avant la HD : on prend la dernière version de download_models.py.
+        let script = self.app_dir().join("mac/download_models.py");
+        if !std::fs::read_to_string(&script).map(|s| s.contains("--hd-only")).unwrap_or(false) {
+            let url = "https://raw.githubusercontent.com/Nolek0/wan2gp-mac/main/mac/download_models.py";
+            engine::download(url, &script, 0, cancel, |_, _| {}).await.context("GitHub injoignable")?;
+        }
+        let mut child = Command::new(self.python())
+            .arg(&script)
+            .arg("--hd-only")
+            .current_dir(self.app_dir())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .context("Impossible de lancer le téléchargement")?;
+        let mut out = BufReader::new(child.stdout.take().unwrap()).lines();
+        loop {
+            tokio::select! {
+                line = out.next_line() => match line? {
+                    Some(l) => if let Ok(v) = serde_json::from_str::<serde_json::Value>(&l) {
+                        let (done, total) = (v["done"].as_u64().unwrap_or(0), v["total"].as_u64().unwrap_or(1).max(1));
+                        progress(Progress { task: task.clone(), label: format!("{HD_NAME} : téléchargement (~{HD_SIZE_GB} Go)"), done: 5 + done * 95 / total, total: 100, finished: false, error: None });
+                    },
+                    None => break,
+                },
+                _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {
+                    if cancel.is_cancelled() {
+                        let _ = child.kill().await;
+                        bail!("Téléchargement annulé.");
+                    }
+                }
+            }
+        }
+        child.wait().await?;
+        if !self.is_hd_installed() {
+            bail!("Le téléchargement de Nova Vidéo HD n'a pas abouti.");
+        }
+        self.stop().await; // le service rechargera le bon modèle
+        progress(Progress { task, label: HD_NAME.into(), done: 100, total: 100, finished: true, error: None });
+        Ok(())
+    }
+
+    pub async fn delete_hd(&self) -> Result<()> {
+        self.stop().await;
+        for f in HD_FILES {
+            let _ = std::fs::remove_file(self.app_dir().join(f));
+        }
+        Ok(())
+    }
+
     pub async fn delete(&self) -> Result<()> {
         self.stop().await;
         if self.root.exists() {
@@ -239,7 +318,7 @@ impl Video {
         }
         let service = guard.as_mut().unwrap();
         let id = uuid::Uuid::new_v4().to_string();
-        let request = serde_json::json!({"id": id, "cmd": "generate", "prompt": prompt, "seconds": seconds, "preset": "quality"});
+        let request = serde_json::json!({"id": id, "cmd": "generate", "prompt": prompt, "seconds": seconds, "preset": self.preset()});
         service.stdin.write_all(format!("{request}\n").as_bytes()).await?;
         service.stdin.flush().await?;
         loop {
@@ -282,17 +361,28 @@ pub struct Timings {
 impl Timings {
     /// Valeurs mesurées sur un Mac M5 de 16 Go pour 5 s en 720×416 (préréglage « quality ») : ~7 min, 3,7 Go de mémoire au plus.
     pub const DEFAULT: Timings = Timings { load: 25.0, inference: 305.0, decode: 65.0 };
+    /// Nova Vidéo HD (5 s en 960×544, 24 images/s) sur le même Mac : ~9 min, 6,8 Go au plus ; l'assemblage domine.
+    pub const DEFAULT_HD: Timings = Timings { load: 35.0, inference: 132.0, decode: 390.0 };
 
     /// Durées attendues pour une vidéo de `seconds` (le calcul croît un peu plus vite que la durée).
     pub fn scaled(&self, seconds: f64) -> Timings {
-        let k = (frames(seconds) as f64 / 81.0).powf(1.4);
-        Timings { load: self.load, inference: self.inference * k, decode: self.decode * frames(seconds) as f64 / 81.0 }
+        self.scaled_fps(seconds, 16)
+    }
+
+    pub fn scaled_fps(&self, seconds: f64, fps: u64) -> Timings {
+        let r = frames(seconds, fps) as f64 / (5 * fps + 1) as f64;
+        Timings { load: self.load, inference: self.inference * r.powf(1.4), decode: self.decode * r }
     }
 }
 
-fn frames(seconds: f64) -> u64 {
-    let f = (seconds * 16.0).round() as u64;
-    ((f / 4) * 4 + 1).clamp(17, 81)
+fn frames(seconds: f64, fps: u64) -> u64 {
+    let f = (seconds * fps as f64).round() as u64;
+    ((f / 4) * 4 + 1).clamp(17, 5 * fps + 1)
+}
+
+/// Images par seconde du réglage.
+pub fn fps(preset: &str) -> u64 {
+    if preset == "hd" { 24 } else { 16 }
 }
 
 /// Part du temps de création des images écoulée au pas `step` sur `total` : les premiers pas (guidage, pas de saut MagCache)
@@ -300,6 +390,9 @@ fn frames(seconds: f64) -> u64 {
 pub fn inference_fraction(step: u64, total: u64) -> f64 {
     if total == 0 {
         return 0.0;
+    }
+    if total <= 4 {
+        return step as f64 / total as f64; // HD : 3 étapes de même durée
     }
     const PROFILE: [(f64, f64); 10] =
         [(0.0, 0.0), (0.05, 0.16), (0.10, 0.32), (0.15, 0.47), (0.30, 0.62), (0.45, 0.77), (0.60, 0.85), (0.75, 0.92), (0.90, 0.99), (1.0, 1.0)];
@@ -337,17 +430,23 @@ pub fn estimate(expected: &Timings, stage: usize, step: u64, total: u64, in_stag
 
 impl Video {
     fn timings_path(&self) -> PathBuf {
-        self.root.join("timings.json")
+        self.root.join(if self.preset() == "hd" { "timings-hd.json" } else { "timings.json" })
     }
 
-    /// Dernières durées mesurées sur cet ordinateur (pour une vidéo de 5 s), sinon les valeurs de référence.
+    /// Dernières durées mesurées sur cet ordinateur (pour une vidéo de 5 s), sinon les valeurs de référence, avec ce réglage.
     pub fn timings(&self) -> Timings {
-        std::fs::read_to_string(self.timings_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Timings::DEFAULT)
+        let default = if self.preset() == "hd" { Timings::DEFAULT_HD } else { Timings::DEFAULT };
+        std::fs::read_to_string(self.timings_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(default)
+    }
+
+    /// Durées attendues pour une vidéo de `seconds` avec le réglage utilisé.
+    pub fn expected(&self, seconds: f64) -> Timings {
+        self.timings().scaled_fps(seconds, fps(self.preset()))
     }
 
     /// Enregistre les durées d'une vidéo de `seconds`, ramenées à 5 s.
     pub fn save_timings(&self, measured: Timings, seconds: f64) {
-        let unit = Timings { load: 1.0, inference: 1.0, decode: 1.0 }.scaled(seconds);
+        let unit = Timings { load: 1.0, inference: 1.0, decode: 1.0 }.scaled_fps(seconds, fps(self.preset()));
         let t = Timings { load: measured.load, inference: measured.inference / unit.inference, decode: measured.decode / unit.decode };
         if let Ok(json) = serde_json::to_string(&t) {
             let _ = std::fs::write(self.timings_path(), json);

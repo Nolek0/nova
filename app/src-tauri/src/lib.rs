@@ -94,7 +94,7 @@ impl AppState {
         }
         out.push(nova::model_info());
         if self.video.is_installed() {
-            out.push(video::Video::model_info());
+            out.push(self.video.model_info());
         }
         out
     }
@@ -443,6 +443,8 @@ async fn download_model(app: tauri::AppHandle, state: State<'_, AppState>, id: S
     state.downloads.lock().unwrap().insert(task.clone(), cancel.clone());
     let res = if id == video::MODEL_ID {
         state.video.install(&cancel, |p| emit_progress(&app, p)).await
+    } else if id == video::HD_ID {
+        state.video.install_hd(&cancel, |p| emit_progress(&app, p)).await
     } else {
         state.engine.download_model(&id, &cancel, |p| emit_progress(&app, p)).await
     };
@@ -486,6 +488,9 @@ fn cancel_download(state: State<'_, AppState>, task: String) {
 async fn delete_model(state: State<'_, AppState>, id: String) -> R<()> {
     if id == video::MODEL_ID {
         return state.video.delete().await.map_err(err);
+    }
+    if id == video::HD_ID {
+        return state.video.delete_hd().await.map_err(err);
     }
     state.engine.delete_model(&id).await.map_err(err)
 }

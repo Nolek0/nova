@@ -338,11 +338,11 @@ async fn english_video_prompt(state: &AppState, subject: &str, cancel: &llm::Can
     let models = state.available_models().await;
     let model = models.iter().find(|m| m.provider == "llama").or_else(|| models.iter().find(|m| m.provider == "ollama")).or_else(|| models.iter().find(|m| m.provider == "apple"))?;
     let req = GenRequest {
-        instructions: "Tu écris des descriptions pour un générateur de vidéos. Traduis la demande en anglais en une ou deux phrases simples : \
-                       le sujet et son action, le décor et la lumière. L'image doit être nette et réaliste : n'ajoute jamais de flou, \
-                       de « motion blur », d'effet ou de mouvement de caméra, ni rien qui ne soit pas dans la demande. \
-                       Réponds uniquement par la description en anglais, sans guillemets."
-            .into(),
+        instructions: "Tu écris des descriptions pour un générateur de vidéos réalistes. Traduis la demande en anglais en deux phrases \
+                       visuelles et précises : le sujet et son action, le décor, la lumière. S'il y a une personne ou un animal, \
+                       cadre-le en plan rapproché, visage bien visible avec des yeux détaillés et une peau naturelle, et précise \
+                       ses vêtements. Termine par : realistic, sharp focus, natural colors. N'ajoute jamais de flou, de « motion blur », \
+                       d'effet de caméra, ni rien qui contredise la demande. Réponds uniquement par la description en anglais, sans guillemets.".into(),
         history: vec![],
         prompt: subject.to_string(),
         images: vec![],
@@ -357,7 +357,7 @@ async fn make_video(state: &AppState, user: &Message, reply: &mut Message, cance
     use crate::video::{self, Video};
     reply.meta.tool = Some("Vidéo".into());
     reply.meta.engine = Some("Sur l'ordinateur (WanGP)".into());
-    reply.meta.model = Some(video::MODEL_NAME.into());
+    reply.meta.model = Some(if state.video.is_hd_installed() { video::HD_NAME } else { video::MODEL_NAME }.into());
     if !Video::supported() {
         reply.content = "La création de vidéos fonctionne pour l'instant sur les **Mac à puce Apple** (M1 ou plus récent, 16 Go de mémoire conseillés).".into();
         return Ok(());
@@ -370,7 +370,7 @@ async fn make_video(state: &AppState, user: &Message, reply: &mut Message, cance
     let seconds = video::seconds(&user.content);
     let started = std::time::Instant::now();
     let stages: Vec<String> = ["Préparation de la consigne", "Chargement du modèle", "Création des images", "Assemblage de la vidéo"].iter().map(|s| s.to_string()).collect();
-    let expected = state.video.timings().scaled(seconds);
+    let expected = state.video.expected(seconds);
     // Dernier avancement connu : (étape, pas, total, début de l'étape, durée de chaque étape terminée).
     let track = std::sync::Arc::new(std::sync::Mutex::new((0usize, 0u64, 0u64, std::time::Instant::now(), [0f64; 4])));
     let send = {
@@ -437,10 +437,11 @@ async fn make_video(state: &AppState, user: &Message, reply: &mut Message, cance
         extracted_text: None,
     });
     reply.content = format!(
-        "Voici ta vidéo de {} s : *{}*.\n\nCréée sur ton ordinateur en {} avec Wan 2.1 (via WanGP), sans rien envoyer sur Internet.",
+        "Voici ta vidéo de {} s : *{}*.\n\nCréée sur ton ordinateur en {} avec {} (via WanGP), sans rien envoyer sur Internet.",
         seconds.round(),
         subject,
-        duration_text(started.elapsed().as_secs())
+        duration_text(started.elapsed().as_secs()),
+        if state.video.is_hd_installed() { "Wan 2.2 HD" } else { "Wan 2.1" }
     );
     if prompt != subject {
         reply.content += &format!("\n\n<sub>Consigne envoyée au modèle : {prompt}</sub>");

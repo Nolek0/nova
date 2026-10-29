@@ -2,6 +2,16 @@
 
 All notable changes to NOVA are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [0.5.4] — 2026-10-29
+
+### Added
+- **Nova Vidéo HD** (optional, ≈ 8.7 GB more from the Models page): Wan 2.2 5B with the FastWan accelerator, 960×544 at 24 frames per second. People look real: faces, eyes and clothes are sharp. About 9–10 minutes per 5-second video on a 16 GB Mac, 6.8 GB of memory at most. Once installed, it is used for every video.
+
+### Changed
+- **Better requests to the video model**: people and animals are framed closer with a visible face, and the model is steered away from smeared or see-through motion.
+- **No more freezes during a video**: the heavy GPU work is cut into short jobs, so macOS stays responsive. A long attention computation could stall the Mac until it restarted.
+- The time-left estimate has its own measurements for the HD version.
+
 ## [0.5.3] — 2026-10-29
 
 ### Added
